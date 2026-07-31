@@ -1,4 +1,5 @@
 import json
+import pytest
 from mouthguard_core import encode_ready, encode_measurement, encode_error
 
 
@@ -23,6 +24,14 @@ def test_no_face_omits_gap_entirely():
 def test_error_is_terminal_shape():
     d = json.loads(encode_error("camera_busy", "/dev/video0: busy"))
     assert d == {"error": "camera_busy", "detail": "/dev/video0: busy"}
+
+
+def test_degenerate_float_raises_instead_of_emitting_invalid_json():
+    # json.dumps defaults to emitting bare NaN/Infinity, which is not valid
+    # JSON and breaks the strict JSON.parse on the QML side. allow_nan=False
+    # turns that into a loud ValueError at the call site instead.
+    with pytest.raises(ValueError):
+        encode_measurement(float("nan"), None, 1.0)
 
 
 def test_lines_are_single_line_and_newline_free():

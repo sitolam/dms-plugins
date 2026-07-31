@@ -83,7 +83,7 @@ def resolve_model_path(env=None, candidates=None):
 
 
 def _line(obj):
-    return json.dumps(obj, separators=(",", ":"))
+    return json.dumps(obj, separators=(",", ":"), allow_nan=False)
 
 
 def encode_ready(backend, device, fps):
