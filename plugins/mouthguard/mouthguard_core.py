@@ -99,3 +99,24 @@ def encode_measurement(t, gap, face):
 
 def encode_error(code, detail):
     return _line({"error": code, "detail": " ".join(str(detail).split())})
+
+
+def should_redetect(frame_index, have_rect, points=None, rect=None, interval=5):
+    """Whether the HOG face detector must run for this frame.
+
+    Running the detector every frame is the dominant cost; the 68-point
+    predictor against a known rect is roughly a millisecond. Between detections
+    the previous rect is reused, unless the landmarks have wandered out of it.
+    """
+    if not have_rect or rect is None:
+        return True
+    if interval > 0 and frame_index % interval == 0:
+        return True
+    if points is None:
+        return True
+
+    left, top, right, bottom = rect
+    return any(
+        x < left or x > right or y < top or y > bottom
+        for x, y in points
+    )
