@@ -1,5 +1,6 @@
 """Pure helpers for the MouthGuard detector. No I/O, no dlib, no OpenCV."""
 
+import json
 import math
 import os
 
@@ -79,3 +80,22 @@ def resolve_model_path(env=None, candidates=None):
         "Could not find " + MODEL_NAME + ". Install your distro's dlib data "
         "package, or set MOUTHGUARD_MODEL to its path."
     )
+
+
+def _line(obj):
+    return json.dumps(obj, separators=(",", ":"))
+
+
+def encode_ready(backend, device, fps):
+    return _line({"ready": True, "backend": backend, "device": device, "fps": fps})
+
+
+def encode_measurement(t, gap, face):
+    obj = {"t": round(t, 2), "face": round(face, 2)}
+    if gap is not None:
+        obj["gap"] = round(gap, 2)
+    return _line(obj)
+
+
+def encode_error(code, detail):
+    return _line({"error": code, "detail": " ".join(str(detail).split())})
