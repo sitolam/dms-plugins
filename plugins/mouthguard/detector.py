@@ -27,6 +27,21 @@ def emit(line):
     sys.stdout.flush()
 
 
+def positive_scale(raw):
+    """argparse type= validator: --scale must be > 0.
+
+    A zero scale divides by zero when converting landmarks back to
+    full-resolution pixels; a negative scale silently produces garbage
+    coordinates instead of failing. Reject both here, before the camera is
+    ever opened, rather than discovering it mid-loop with the device held.
+    """
+    value = float(raw)
+    if value <= 0:
+        raise argparse.ArgumentTypeError(
+            f"--scale must be > 0, got {raw!r}")
+    return value
+
+
 def parse_args(argv=None):
     p = argparse.ArgumentParser(prog="detector.py")
     p.add_argument("--device", default="/dev/video0")
@@ -34,7 +49,7 @@ def parse_args(argv=None):
     p.add_argument("--detect-interval", type=int, default=5)
     p.add_argument("--width", type=int, default=640)
     p.add_argument("--height", type=int, default=480)
-    p.add_argument("--scale", type=float, default=0.5)
+    p.add_argument("--scale", type=positive_scale, default=0.5)
     p.add_argument("--self-test", action="store_true")
     return p.parse_args(argv)
 
@@ -98,9 +113,14 @@ def main(argv=None):
     points = None
     t0 = time.monotonic()
     period = 1.0 / max(1, args.fps)
-    inv_scale = 1.0 / args.scale
 
     try:
+        # Computed inside the try block, not before it, so a degenerate
+        # --scale can never leave the camera handle open on the way out.
+        # parse_args already rejects --scale <= 0, so this is defence in
+        # depth rather than the primary guard.
+        inv_scale = 1.0 / args.scale
+
         while True:
             cmd = read_command()
             if cmd == "quit":
@@ -111,12 +131,18 @@ def main(argv=None):
                     cap.release()
                     cap = None
                 rect = None
+                points = None
             elif cmd == "resume" and paused:
-                paused = False
                 cap = open_capture()
                 if cap is None:
-                    emit(encode_error("camera_busy", f"{args.device}: cannot reopen"))
-                    return 3
+                    emit(encode_error(
+                        "camera_busy", f"{args.device}: cannot reopen, staying paused"))
+                    # Stay paused and keep the process alive: exiting here
+                    # would discard the resident dlib model over a momentary
+                    # device-busy blip, which is exactly the cost pause/
+                    # resume exists to avoid. A later "resume" can retry.
+                else:
+                    paused = False
 
             if paused:
                 time.sleep(period)

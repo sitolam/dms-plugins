@@ -13,6 +13,13 @@ def run_self_test():
     )
 
 
+def run_detector(*extra_args):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "detector.py"), *extra_args],
+        capture_output=True, text=True, timeout=60, cwd=ROOT,
+    )
+
+
 def test_self_test_exits_cleanly():
     assert run_self_test().returncode == 0
 
@@ -36,3 +43,39 @@ def test_emits_measurements_after_the_handshake():
     measurements = [json.loads(x) for x in lines[1:]]
     assert len(measurements) == 3
     assert all("t" in m and "face" in m for m in measurements)
+
+
+# A zero or negative --scale must be rejected by argparse validation before
+# main() ever imports cv2/dlib or opens the camera. --scale 0 would divide by
+# zero when converting landmarks back to full-resolution pixels; a negative
+# scale would silently produce garbage coordinates. This must hold whether or
+# not --self-test is also passed, since parse_args() runs before the
+# self-test branch is even checked.
+
+
+def test_zero_scale_is_rejected_by_argument_parsing():
+    result = run_detector("--scale", "0")
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "--scale" in result.stderr
+
+
+def test_zero_scale_is_rejected_even_with_self_test():
+    result = run_detector("--scale", "0", "--self-test")
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "--scale" in result.stderr
+
+
+def test_negative_scale_is_rejected_by_argument_parsing():
+    result = run_detector("--scale", "-1")
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "--scale" in result.stderr
+
+
+def test_negative_scale_is_rejected_even_with_self_test():
+    result = run_detector("--scale", "-1", "--self-test")
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "--scale" in result.stderr
