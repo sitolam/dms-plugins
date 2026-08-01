@@ -30,10 +30,11 @@ def emit(line):
 def positive_scale(raw):
     """argparse type= validator: --scale must be > 0.
 
-    A zero scale divides by zero when converting landmarks back to
-    full-resolution pixels; a negative scale silently produces garbage
-    coordinates instead of failing. Reject both here, before the camera is
-    ever opened, rather than discovering it mid-loop with the device held.
+    A zero scale divides by zero when converting the detector's rectangle
+    back to full-resolution pixels; a negative scale silently produces
+    garbage coordinates instead of failing. Reject both here, before the
+    camera is ever opened, rather than discovering it mid-loop with the
+    device held.
     """
     value = float(raw)
     if value <= 0:
@@ -49,7 +50,11 @@ def parse_args(argv=None):
     p.add_argument("--detect-interval", type=int, default=5)
     p.add_argument("--width", type=int, default=640)
     p.add_argument("--height", type=int, default=480)
-    p.add_argument("--scale", type=positive_scale, default=0.5)
+    p.add_argument(
+        "--scale", type=positive_scale, default=0.5,
+        help="downscale factor for the HOG face detector only, in (0, 1]; "
+             "the 68-point predictor always runs at full resolution, so "
+             "this does not affect measurement precision")
     p.add_argument("--self-test", action="store_true")
     return p.parse_args(argv)
 
@@ -115,10 +120,15 @@ def main(argv=None):
     period = 1.0 / max(1, args.fps)
 
     try:
-        # Computed inside the try block, not before it, so a degenerate
-        # --scale can never leave the camera handle open on the way out.
-        # parse_args already rejects --scale <= 0, so this is defence in
-        # depth rather than the primary guard.
+        # inv_scale maps the HOG detector's rectangle, found on the
+        # downscaled frame, up to full-resolution pixel coordinates. It is
+        # no longer used to scale landmarks: the predictor now runs
+        # directly on the full-resolution frame, so its output is already
+        # in the canonical space. Computed inside the try block, not
+        # before it, so a degenerate --scale can never leave the camera
+        # handle open on the way out; parse_args already rejects
+        # --scale <= 0, so this is defence in depth rather than the
+        # primary guard.
         inv_scale = 1.0 / args.scale
 
         while True:
@@ -153,16 +163,36 @@ def main(argv=None):
                 time.sleep(period)
                 continue
 
-            small = cv2.resize(frame, None, fx=args.scale, fy=args.scale)
-            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+            # Grayscale the full frame once. The HOG detector still runs on
+            # a downscaled copy of it -- detection cost scales with area,
+            # and that is the expensive step -- but the 68-point predictor
+            # runs against the full-resolution grayscale image below, so
+            # landmarks are never quantised by a downscale-then-upscale
+            # round trip. That round trip used to halve measurement
+            # precision at the default --scale 0.5: the predictor returns
+            # integer pixel coordinates, and a barely-parted mouth a few
+            # pixels wide cannot afford to lose half its resolution.
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            small_gray = cv2.resize(gray, None, fx=args.scale, fy=args.scale)
 
             if should_redetect(frame_index, rect is not None, points, rect,
                                args.detect_interval):
-                faces = detector(gray, 0)
+                faces = detector(small_gray, 0)
                 if faces:
                     # Largest face wins; multi-face tracking is out of scope.
                     face = max(faces, key=lambda f: f.width() * f.height())
-                    rect = (face.left(), face.top(), face.right(), face.bottom())
+                    # Scale the detector's rect up to full-resolution
+                    # coordinates immediately on detection. Full resolution
+                    # is the one canonical space for the cached rect from
+                    # here on -- should_redetect compares it against
+                    # `points` below, which are also full-resolution, and
+                    # the two must never drift into different spaces.
+                    rect = (
+                        round(face.left() * inv_scale),
+                        round(face.top() * inv_scale),
+                        round(face.right() * inv_scale),
+                        round(face.bottom() * inv_scale),
+                    )
                 else:
                     rect = None
                     points = None
@@ -172,11 +202,11 @@ def main(argv=None):
             else:
                 shape = predictor(gray, dlib.rectangle(*rect))
                 points = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
-                # Scale back to full-resolution pixels so gap and face height
-                # stay comparable across --scale values.
-                full = [(x * inv_scale, y * inv_scale) for x, y in points]
+                # Landmarks come back in full-resolution pixels already --
+                # the predictor ran against the full-resolution image, not
+                # the downscaled one -- so no further scaling is applied.
                 emit(encode_measurement(
-                    time.monotonic() - t0, lip_gap(full), face_height(full)))
+                    time.monotonic() - t0, lip_gap(points), face_height(points)))
 
             frame_index += 1
             time.sleep(period)
