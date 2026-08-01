@@ -66,10 +66,14 @@ TestCase {
     }
 
     function test_closing_records_the_event_duration() {
+        // dt is honest at every step here (dt === now - previousNow), unlike
+        // most other tests in this file which use feed()'s lazy dt default.
+        // This proves the round-3 pause bound does not alter behaviour when
+        // the caller tells the truth: the full 3000ms duration still lands.
         var s = make()
-        feed(s, { now: 100, isOpen: true })
-        feed(s, { now: 1100, isOpen: true })
-        var ev = feed(s, { now: 3100, isOpen: false })
+        feed(s, { now: 100, dt: 100, isOpen: true })
+        feed(s, { now: 1100, dt: 1000, isOpen: true })
+        var ev = feed(s, { now: 3100, dt: 2000, isOpen: false })
         verify(ev.indexOf("closed") >= 0)
         compare(s.openEvents.length, 1)
         compare(s.openEvents[0], 3000)
@@ -125,6 +129,14 @@ TestCase {
         var ev = feed(s, { now: 600, isOpen: true })
         compare(s.mouthOpen, false); compare(ev.length, 0); compare(s.rawOpenSince, 600)
     }
+    // Deliberately violates the dt === now - previousNow contract (now jumps
+    // 1000ms while dt stays 100) on purpose: that is the only way to drive
+    // totalClosedMs below the retroactive open-time credit and reach the
+    // Math.max(0, ...) clamp. That clamp is defensive code inherited from
+    // the browser original — honest dt can never make totalClosedMs go
+    // negative, since the clamped amount and the dt-accumulated amount would
+    // agree. Do not "fix" this test's dt to be honest; doing so would remove
+    // the clamp's only test coverage.
     function test_closed_total_clamps_at_zero() {
         var s = SM.createState()
         feed(s, { now: 100, dt: 100, isOpen: true }); feed(s, { now: 1100, dt: 100, isOpen: true })
