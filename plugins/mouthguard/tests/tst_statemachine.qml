@@ -204,4 +204,69 @@ TestCase {
         compare(ev.length, 0)
         compare(s.openEvents.length, 0)
     }
+
+    // --- Fix round 3: auto-pause hardening (bound event ends to what was
+    // actually observed, regardless of caller discipline) ---
+
+    function test_pause_then_close_bounds_the_event_to_last_observation() {
+        // Ticks stop entirely for ~10 minutes (auto-pause: session locked or
+        // went idle), then a single tick arrives with the wall clock jumped
+        // but dt reporting only one normal frame. The recorded event must be
+        // bounded to roughly one tick past the last real observation, not
+        // the full ~601000ms gap.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                 // confirmed, currentOpenStart = 100
+        var ev = feed(s, { now: 601100, dt: 100, isOpen: false })
+        verify(ev.indexOf("closed") >= 0)
+        compare(s.mouthOpen, false)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 1100)                        // bounded: (1100 + 100) - 100
+        // The recorded event reconciles with the time actually accounted as
+        // open — not the ~601000ms the raw clock jump would otherwise imply.
+        compare(s.totalOpenMs, s.openEvents[0])
+    }
+
+    function test_pause_then_still_open_grants_no_retroactive_credit() {
+        // Same pause shape, but the resume tick reports the mouth still
+        // open: nothing closes, so only the honestly-reported dt may be
+        // credited — not the ~10 minute gap.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                 // confirmed, alert 1
+        var openMsBeforeGap = s.totalOpenMs
+        var ev = feed(s, { now: 601100, dt: 100, isOpen: true })
+        compare(s.mouthOpen, true)
+        compare(s.openEvents.length, 0)
+        compare(s.totalOpenMs, openMsBeforeGap + 100)
+        verify(ev.indexOf("alert") >= 0)                      // resume still re-arms normally
+    }
+
+    function test_finish_after_pause_is_bounded() {
+        // finish() called after the same gap, with no further tick reporting
+        // it, must be bounded using the last tick's own stored (now, dt).
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                 // confirmed, currentOpenStart = 100
+        var ev = SM.finish(s, 601100)
+        verify(ev.indexOf("closed") >= 0)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 1100)                        // bounded: (1100 + 100) - 100
+    }
+
+    function test_honest_long_dt_tick_is_not_clamped() {
+        // A single genuinely long-but-honest tick — dt truthfully equal to
+        // now - previousNow — must NOT be penalised. This is what
+        // distinguishes "bound the damage from a lying caller" from "clamp
+        // everything": the bound must be inert when the contract is honoured
+        // even for a very large, honest dt.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                 // confirmed, currentOpenStart = 100
+        var ev = feed(s, { now: 601100, dt: 600000, isOpen: false })  // 601100 - 1100 === 600000, honest
+        verify(ev.indexOf("closed") >= 0)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 601000)                      // full honest duration, not clamped
+        compare(s.totalOpenMs, 601000)
+    }
 }

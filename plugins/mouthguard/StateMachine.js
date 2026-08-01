@@ -22,21 +22,37 @@ function createState() {
         totalOpenMs: 0,
         totalClosedMs: 0,
         totalUnmeasuredMs: 0,
-        openEvents: []
+        openEvents: [],
+        previousNow: null,
+        previousDt: null
     }
 }
 
 // Events shorter than this are camera blips, not real mouth openings.
 var MIN_EVENT_MS = 200
 
+// Bounds a candidate close timestamp so an open event can never be recorded
+// as extending past the last moment the state machine actually observed.
+// referenceNow===null means no prior tick has been observed yet, so there is
+// nothing to bound against. When the caller honours the dt === now -
+// previousNow contract, referenceNow + referenceDt === candidateNow exactly,
+// so the bound is inert and nothing changes.
+function boundEventEnd(candidateNow, referenceNow, referenceDt) {
+    if (referenceNow === null) {
+        return candidateNow
+    }
+    return Math.min(candidateNow, referenceNow + referenceDt)
+}
+
 // Shared close-and-record step used by the normal close path, the no-face
 // path, and finish(): if the duration qualifies (strictly greater than
 // MIN_EVENT_MS) it is pushed onto openEvents, then mouthOpen/currentOpenStart
 // are cleared. Callers are responsible for anything beyond that (pushing the
 // "closed" event string, resetting rawOpenSince, etc.) since the call sites
-// need slightly different surrounding behaviour.
-function closeOpenEvent(state, now) {
-    var dur = now - (state.currentOpenStart === null ? now : state.currentOpenStart)
+// need slightly different surrounding behaviour. `endAt` must already be
+// bounded (see boundEventEnd) by the caller.
+function closeOpenEvent(state, endAt) {
+    var dur = endAt - (state.currentOpenStart === null ? endAt : state.currentOpenStart)
     if (dur > MIN_EVENT_MS) {
         state.openEvents.push(dur)
     }
@@ -54,6 +70,16 @@ function tick(state, input) {
     var delay = input.delay
     var events = []
 
+    // Capture the previous tick's (now, dt) before overwriting it. This
+    // tick's own dt, paired with that previous now, bounds how far an event
+    // closed during this tick may be recorded as extending (see
+    // boundEventEnd) — an auto-pause that stops calling tick() for a long
+    // stretch and then resumes with a jumped `now` must not turn the gap
+    // into a fabricated open (or closed) span.
+    var prevNow = state.previousNow
+    state.previousNow = now
+    state.previousDt = dt
+
     if (!input.hasFace) {
         // Time counts toward neither open nor closed — we genuinely do not
         // know the state while the face is not visible.
@@ -66,7 +92,7 @@ function tick(state, input) {
         // chose to make no claim about what happened while the face was not
         // visible.
         if (state.mouthOpen) {
-            closeOpenEvent(state, now)
+            closeOpenEvent(state, boundEventEnd(now, prevNow, dt))
             events.push("closed")
         }
 
@@ -111,7 +137,7 @@ function tick(state, input) {
         }
     } else {
         if (state.mouthOpen) {
-            closeOpenEvent(state, now)
+            closeOpenEvent(state, boundEventEnd(now, prevNow, dt))
             events.push("closed")
         }
         state.rawOpenSince = null
@@ -122,11 +148,13 @@ function tick(state, input) {
 
 // Ports index.html:1577-1581 — records the in-progress open event (if any)
 // when a session stops, so it is not silently dropped. A no-op when nothing
-// is currently confirmed open.
+// is currently confirmed open. Bounded the same way as tick()'s close path,
+// using the last tick's own stored (now, dt), since finish() contributes no
+// elapsed-time claim of its own.
 function finish(state, now) {
     var events = []
     if (state.mouthOpen) {
-        closeOpenEvent(state, now)
+        closeOpenEvent(state, boundEventEnd(now, state.previousNow, state.previousDt))
         events.push("closed")
     }
     return events
