@@ -13,8 +13,13 @@
         pythonEnv = pkgs.python3.withPackages (ps: with ps; [
           dlib opencv4 numpy face-recognition-models
         ]);
+        detectorSrc = pkgs.runCommand "mouthguard-detector-src" { } ''
+          mkdir -p $out
+          cp ${./detector.py} $out/detector.py
+          cp ${./mouthguard_core.py} $out/mouthguard_core.py
+        '';
         detector = pkgs.writeShellScriptBin "mouthguard-detector" ''
-          exec ${pythonEnv}/bin/python3 ${./detector.py} "$@"
+          exec ${pythonEnv}/bin/python3 ${detectorSrc}/detector.py "$@"
         '';
         default = detector;
       });
