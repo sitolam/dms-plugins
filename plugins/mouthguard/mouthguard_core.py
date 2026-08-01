@@ -120,3 +120,13 @@ def should_redetect(frame_index, have_rect, points=None, rect=None, interval=5):
         x < left or x > right or y < top or y > bottom
         for x, y in points
     )
+
+
+# Derived empirically — see CALIBRATION.md. These are dlib-scale values,
+# measured against the full-resolution HOG detector and 68-point predictor,
+# and bear no relation to the web app's MediaPipe-scale threshold of 5 and
+# distance-compensation reference of 100px. Do not "round trip" a value
+# between the two apps; they are different measurement pipelines on
+# different coordinate scales.
+DEFAULT_THRESHOLD = 3.5
+DEFAULT_DISTANCE_REF = 71
