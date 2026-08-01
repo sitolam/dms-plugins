@@ -41,6 +41,15 @@
           # itself. Point both the Qt6 and legacy Qt5-named variables at it,
           # derived from the qtdeclarative package already in this shell's
           # inputs so it tracks nixpkgs bumps instead of a pinned store path.
+          # QML_IMPORT_PATH is prepended-to rather than overwritten because it
+          # is a real, still-consulted Qt6 variable: something outside this
+          # shell (another tool, an editor, a parent shell) may legitimately
+          # already have paths on it that we want to keep. QML2_IMPORT_PATH is
+          # just Qt6's back-compat alias for it — nothing should be setting
+          # QML2_IMPORT_PATH on its own account, so it is simply assigned the
+          # final, already-merged QML_IMPORT_PATH value rather than merged
+          # separately (merging it independently would risk the two variables
+          # disagreeing, which defeats the point of one being an alias).
           shellHook = ''
             export QML_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
             export QML2_IMPORT_PATH="$QML_IMPORT_PATH"

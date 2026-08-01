@@ -99,6 +99,9 @@ TestCase {
         var ev = feed(s, { now: 2200, isOpen: false, hasFace: false })
         compare(ev.indexOf("alert"), -1)
         compare(s.totalUnmeasuredMs, 100)
+        // What actually matters about "pausing": the open total must not
+        // keep advancing while we cannot see the face.
+        compare(s.totalOpenMs, 1000)
     }
 
     function test_zero_delay_confirms_immediately() {
@@ -106,5 +109,99 @@ TestCase {
         var ev = feed(s, { now: 100, isOpen: true, delay: 0 })
         compare(s.mouthOpen, true)
         verify(ev.indexOf("alert") >= 0)
+    }
+
+    // --- Fix round 2: mutation-testing gap-fillers, verbatim from review ---
+
+    function test_rearm_resets_the_clock() {
+        var s = SM.createState()
+        feed(s, { now: 100, isOpen: true }); feed(s, { now: 1100, isOpen: true })
+        verify(feed(s, { now: 2200, isOpen: true }).indexOf("alert") >= 0)
+        compare(feed(s, { now: 2700, isOpen: true }).indexOf("alert"), -1)
+    }
+    function test_close_resets_the_detection_window() {
+        var s = SM.createState()
+        feed(s, { now: 100, isOpen: true }); feed(s, { now: 500, isOpen: false })
+        var ev = feed(s, { now: 600, isOpen: true })
+        compare(s.mouthOpen, false); compare(ev.length, 0); compare(s.rawOpenSince, 600)
+    }
+    function test_closed_total_clamps_at_zero() {
+        var s = SM.createState()
+        feed(s, { now: 100, dt: 100, isOpen: true }); feed(s, { now: 1100, dt: 100, isOpen: true })
+        compare(s.totalClosedMs, 0); compare(s.totalOpenMs, 1000)
+    }
+    function test_retro_uses_actual_duration_not_delay() {
+        var s = SM.createState()
+        feed(s, { now: 100, dt: 100, isOpen: true }); feed(s, { now: 1350, dt: 1250, isOpen: true })
+        compare(s.totalOpenMs, 1250); compare(s.totalClosedMs, 100)
+    }
+    function test_exactly_200ms_is_discarded() {
+        var s = SM.createState()
+        feed(s, { now: 100, isOpen: true, delay: 0 }); feed(s, { now: 300, isOpen: false, delay: 0 })
+        compare(s.openEvents.length, 0)
+    }
+
+    // --- Fix round 2: new no-face semantics (close-on-no-face, session finish) ---
+
+    function test_no_face_while_confirmed_open_closes_and_records_event() {
+        // No face is treated as not-open, faithful to the browser original:
+        // an in-progress confirmed-open event must be closed and recorded,
+        // not left dangling, when the face disappears.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                       // confirmed, currentOpenStart = 100
+        var ev = feed(s, { now: 2200, dt: 1100, isOpen: true, hasFace: false })
+        verify(ev.indexOf("closed") >= 0)
+        compare(s.mouthOpen, false)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 2100)                              // 2200 - 100
+    }
+
+    function test_no_face_mid_window_leaves_no_trace() {
+        // Face lost before confirmation: there was never a confirmed event to
+        // close, so nothing is recorded — but the raw-open run must still
+        // reset, per the original's invariant.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })                         // rawOpenSince = 100, unconfirmed
+        var ev = feed(s, { now: 400, dt: 300, isOpen: true, hasFace: false })
+        compare(ev.length, 0)
+        compare(s.mouthOpen, false)
+        compare(s.openEvents.length, 0)
+        compare(s.rawOpenSince, null)
+        compare(s.totalUnmeasuredMs, 300)
+    }
+
+    function test_face_returns_after_absence_starts_fresh_window() {
+        // Regression check for the "alert fires on the first frame back"
+        // bug: once the face returns, even with the mouth still open, a
+        // brand-new detection window must start — no immediate alert.
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                        // confirmed + alert
+        feed(s, { now: 2200, dt: 1100, isOpen: true, hasFace: false }) // face lost while open -> closes
+        var ev = feed(s, { now: 2300, dt: 100, isOpen: true })
+        compare(ev.indexOf("alert"), -1)
+        compare(ev.indexOf("confirmed"), -1)
+        compare(s.mouthOpen, false)
+        compare(s.rawOpenSince, 2300)
+    }
+
+    function test_finish_flushes_open_event() {
+        var s = make()
+        feed(s, { now: 100, isOpen: true })
+        feed(s, { now: 1100, isOpen: true })                        // confirmed, currentOpenStart = 100
+        var ev = SM.finish(s, 3000)
+        verify(ev.indexOf("closed") >= 0)
+        compare(s.mouthOpen, false)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 2900)                              // 3000 - 100
+    }
+
+    function test_finish_is_noop_when_nothing_open() {
+        var s = make()
+        feed(s, { now: 100, isOpen: false })
+        var ev = SM.finish(s, 200)
+        compare(ev.length, 0)
+        compare(s.openEvents.length, 0)
     }
 }
