@@ -65,16 +65,25 @@ PluginComponent {
     property real _sessionStart: 0
 
     function toggle() {
-        active = !active
         if (active) {
-            resetSession()
+            _stopSession()
         } else {
-            // Flush any in-progress open event, or it is silently dropped
-            // from sessionStats.events / avgOpenMs.
-            SM.finish(_sm, Date.now())
-            _publishStats()
-            mouthState = "inactive"
+            active = true
+            resetSession()
         }
+    }
+
+    // Every path that ends a session (manual toggle-off, no-face auto-stop,
+    // a detector-reported error, and a detector crash) must flush any
+    // in-progress open event and settle state the same way, or it is
+    // silently dropped from sessionStats.events / avgOpenMs -- the exact bug
+    // finish() exists to prevent. One helper, four call sites, so a future
+    // fifth stop path cannot reintroduce it by copy-paste omission.
+    function _stopSession() {
+        SM.finish(_sm, Date.now())
+        _publishStats()
+        active = false
+        mouthState = "inactive"
     }
 
     function resetSession() {
@@ -132,6 +141,14 @@ PluginComponent {
                 ? msg.gap * (DISTANCE_REF / msg.face) : msg.gap
         } else {
             if (!_noFaceSince) _noFaceSince = now
+            // Zeroed together, deliberately: leaving lastGap/lastFace at
+            // their last-seen values while only lastAdjGap went to zero
+            // would let a consumer (the Task 15 popout) display a stale
+            // "last known" reading as if it were current. Detection itself
+            // is unaffected either way -- isOpen already requires hasFace --
+            // this is about not silently showing a wrong number.
+            lastGap = 0
+            lastFace = 0
             lastAdjGap = 0
         }
 
@@ -144,10 +161,18 @@ PluginComponent {
         if (events.indexOf("alert") >= 0) _alert(now)
 
         // Chart plots the same number the threshold is compared against, so the
-        // threshold line stays meaningful whichever mode is active.
+        // threshold line stays meaningful whichever mode is active. A fresh
+        // array is still built every tick (assigning the same array
+        // reference back to a `property var` would not fire gapHistoryChanged,
+        // so reactive consumers like the Task 14 chart would silently stop
+        // updating) -- but the second, trimming pass only runs when an entry
+        // has actually aged out of the 60s window, rather than on every tick.
         const cutoff = now - 60000
-        const next = gapHistory.concat([{ t: now, gap: hasFace ? effective : 0 }])
-        gapHistory = next.filter(p => p.t >= cutoff)
+        let next = gapHistory.concat([{ t: now, gap: hasFace ? effective : 0 }])
+        if (next.length && next[0].t < cutoff) {
+            next = next.filter(p => p.t >= cutoff)
+        }
+        gapHistory = next
 
         mouthState = !hasFace ? "noface" : (_sm.mouthOpen ? "open" : "closed")
         _publishStats()
@@ -157,16 +182,11 @@ PluginComponent {
             ToastService?.showInfo(
                 "MouthGuard stopped — no face detected for "
                 + Math.round(noFaceTimeoutMs / 60000) + " minutes")
-            // Session is stopping: flush any in-progress open event, same as
-            // the manual toggle()-off path. In practice the state machine
-            // already closed any open event the instant the face was lost
-            // (tick()'s no-face branch), so this is normally a no-op here --
-            // but it is called for the same reason toggle() calls it: so a
-            // session never ends silently dropping its last open event.
-            SM.finish(_sm, now)
-            _publishStats()
-            active = false
-            mouthState = "inactive"
+            // In practice the state machine already closed any open event
+            // the instant the face was lost (tick()'s no-face branch), so
+            // _stopSession()'s finish() call is normally a no-op here -- it
+            // is still called for consistency with every other stop path.
+            _stopSession()
         }
     }
 
@@ -188,7 +208,7 @@ PluginComponent {
                 try { msg = JSON.parse(data) } catch (e) { return }
                 if (msg.error) {
                     ToastService?.showError("MouthGuard: " + msg.error + " — " + msg.detail)
-                    root.active = false
+                    root._stopSession()
                     return
                 }
                 if (msg.ready) return
@@ -201,10 +221,19 @@ PluginComponent {
         }
 
         onExited: exitCode => {
+            // Whatever starts the detector next -- an explicit toggle-on, or
+            // the `running: root.active` binding restarting a process that
+            // died on its own while root.active never changed -- begins from
+            // a cold camera. Reset unconditionally (both exit codes, not
+            // just the error path) so the first measurement after any
+            // restart takes _onMeasurement's fabricated-100ms dt branch
+            // instead of computing a dt spanning the entire dead interval,
+            // which the state machine would otherwise credit in full to
+            // open or closed time despite nothing having been measured.
+            root._lastTickAt = 0
             if (exitCode !== 0 && root.active) {
                 ToastService?.showError("MouthGuard detector exited: " + exitCode)
-                root.active = false
-                root.mouthState = "inactive"
+                root._stopSession()
             }
         }
     }
