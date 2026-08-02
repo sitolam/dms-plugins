@@ -21,6 +21,19 @@ PluginComponent {
     readonly property bool notifications: pluginData?.notifications ?? true
     readonly property int fps: pluginData?.fps ?? 10
     readonly property int noFaceTimeoutMs: (pluginData?.noFaceTimeout ?? 5) * 60000
+    readonly property bool autoPause: pluginData?.autoPause ?? true
+
+    // Bound (not merely read once) so any of these services changing state
+    // while the plugin is running -- lock, idle, screen-off, or a sleep
+    // preparation signal -- flips this immediately. Gated on `active` so a
+    // stale true left over from before the session started can't fire
+    // onShouldPauseChanged before there is a detector to pause.
+    readonly property bool shouldPause: active && autoPause && (
+        (SessionService?.locked ?? false)
+        || (SessionService?.idleHint ?? false)
+        || (SessionService?.preparingForSleep ?? false)
+        || (IdleService?.monitorsOff ?? false)
+    )
 
     // Calibrated against the real dlib pipeline on the project owner's
     // hardware; see CALIBRATION.md and mouthguard_core.DEFAULT_THRESHOLD /
@@ -50,6 +63,11 @@ PluginComponent {
     // --- live state -------------------------------------------------------
     property bool active: false
     property bool alertsMuted: false
+    // True while the detector has released the capture device (auto-pause)
+    // or is between processes after a crash/restart -- both are "we are not
+    // currently receiving measurements" gaps, reconciled the same way. See
+    // onShouldPauseChanged, onExited, and _onMeasurement/_reconcileGap.
+    property bool paused: false
     property string mouthState: "inactive"
     property real lastGap: 0
     property real lastFace: 0
@@ -80,10 +98,40 @@ PluginComponent {
     // finish() exists to prevent. One helper, four call sites, so a future
     // fifth stop path cannot reintroduce it by copy-paste omission.
     function _stopSession() {
-        SM.finish(_sm, Date.now())
+        const now = Date.now()
+        // If a session is stopped while still mid-gap (paused for a lock
+        // that never unlocked before toggle-off, or between a crashed
+        // detector and its replacement's first line -- see onExited) the
+        // gap has to be credited to totalUnmeasuredMs here too, or it is
+        // simply dropped from the final stats and accounted would fall
+        // short of session length. _reconcileGap always closes any
+        // in-progress open event itself, so the finish() call below becomes
+        // a no-op for that event -- it still runs unconditionally since
+        // finish() is what every other stop path relies on.
+        if (paused) _reconcileGap(now)
+        SM.finish(_sm, now)
         _publishStats()
         active = false
+        paused = false
         mouthState = "inactive"
+    }
+
+    // Credits an interval during which tick() was never called -- an
+    // auto-pause (lock/idle/sleep), or a detector crash-and-restart -- to
+    // totalUnmeasuredMs, via the state machine's own no-face branch (never
+    // by writing _sm.totalUnmeasuredMs directly, and never by altering
+    // StateMachine.js). dt = now - _lastTickAt satisfies tick()'s "dt ===
+    // now - previousNow" caller contract exactly: nothing else advances the
+    // state machine's clock while paused is true, because _onMeasurement
+    // drops every stray in-flight line for as long as shouldPause holds.
+    function _reconcileGap(now) {
+        if (_lastTickAt) {
+            SM.tick(_sm, {
+                now: now, dt: now - _lastTickAt,
+                isOpen: false, hasFace: false, delay: alertDelayMs
+            })
+        }
+        _lastTickAt = now
     }
 
     function resetSession() {
@@ -93,8 +141,37 @@ PluginComponent {
         _sessionStart = Date.now()
         _lastAlertDeliveredAt = 0
         gapHistory = []
+        paused = false
         mouthState = "closed"
         _publishStats()
+    }
+
+    // Auto-pause: release the capture device (camera LED off) on lock,
+    // idle, screen-off, or sleep preparation, without killing the detector
+    // process -- the whole point is to avoid paying the ~1s dlib model
+    // reload on every lock/unlock. detector.py keeps the model resident and
+    // just stops/starts touching the device (see detector.py's "pause"/
+    // "resume" stdin commands).
+    onShouldPauseChanged: {
+        if (!active) return
+        if (shouldPause) {
+            paused = true
+            mouthState = "paused"
+            detector.write("pause\n")
+        } else {
+            // Ask the detector to reopen the camera, but do NOT clear
+            // `paused` (or resume measurement processing) here. detector.py
+            // can fail to reopen -- camera still settling, another app
+            // grabbed it -- and deliberately stays alive and paused rather
+            // than exiting (see the stdout handler's camera_busy case
+            // below), so treating this write as instant success would both
+            // mis-report state and let the next real measurement's dt span
+            // the failed-resume retry wait as if it were live data. `paused`
+            // is only cleared once a real measurement actually arrives --
+            // see _onMeasurement -- which is also where the whole dead span
+            // gets credited to totalUnmeasuredMs.
+            detector.write("resume\n")
+        }
     }
 
     function _publishStats() {
@@ -129,6 +206,28 @@ PluginComponent {
 
     function _onMeasurement(msg) {
         const now = Date.now()
+
+        if (paused) {
+            if (shouldPause) {
+                // Still supposed to be paused: this is a stray measurement
+                // line already in flight before the detector processed our
+                // "pause" command (or before it processes a fresh "pause"
+                // sent for a still-active lock/idle condition). Drop it
+                // without touching _lastTickAt or the state machine so it
+                // cannot be counted during the pause.
+                return
+            }
+            // shouldPause is false, so we've asked the detector to resume
+            // (or a crashed process was replaced -- see onExited) and this
+            // is the first real measurement since. That is proof the dead
+            // span is over, however long it took -- including any failed-
+            // resume retries or a model reload. Credit the whole span to
+            // totalUnmeasuredMs with a single synthetic no-face tick before
+            // processing this measurement.
+            _reconcileGap(now)
+            paused = false
+        }
+
         const dt = _lastTickAt ? now - _lastTickAt : 100
         _lastTickAt = now
 
@@ -195,6 +294,9 @@ PluginComponent {
     Process {
         id: detector
         running: root.active
+        // Required so detector.write() below can reach the process's stdin
+        // -- that's how "pause"/"resume" are delivered.
+        stdinEnabled: true
         command: [
             "python3", pluginService.getPluginPath(root.pluginId) + "/detector.py",
             "--device", root.device, "--fps", String(root.fps)
@@ -208,10 +310,32 @@ PluginComponent {
                 try { msg = JSON.parse(data) } catch (e) { return }
                 if (msg.error) {
                     ToastService?.showError("MouthGuard: " + msg.error + " — " + msg.detail)
+                    // A failed resume attempt reports camera_busy too, but
+                    // detector.py deliberately stays alive and paused rather
+                    // than exiting in that case (see detector.py's "resume"
+                    // branch) -- exiting would discard the resident dlib
+                    // model over what may be a momentary device-busy blip,
+                    // exactly the cost auto-pause exists to avoid. Every
+                    // other error (model missing, the initial camera open
+                    // failing) happens before any pause could have occurred,
+                    // so root.paused is false there and this falls through
+                    // to the normal fatal handling below.
+                    if (msg.error === "camera_busy" && root.paused) return
                     root._stopSession()
                     return
                 }
-                if (msg.ready) return
+                if (msg.ready) {
+                    // A fresh process (first start, or the restart onExited
+                    // marks with paused=true) always starts unpaused and
+                    // capturing. If a pause condition is still active --
+                    // e.g. the detector crashed while the session was
+                    // locked -- bring it in line immediately rather than
+                    // leaving the camera live until the next lock/unlock
+                    // edge; onShouldPauseChanged won't fire again on its
+                    // own since shouldPause never changed.
+                    if (root.shouldPause) detector.write("pause\n")
+                    return
+                }
                 root._onMeasurement(msg)
             }
         }
@@ -221,19 +345,26 @@ PluginComponent {
         }
 
         onExited: exitCode => {
-            // Whatever starts the detector next -- an explicit toggle-on, or
-            // the `running: root.active` binding restarting a process that
-            // died on its own while root.active never changed -- begins from
-            // a cold camera. Reset unconditionally (both exit codes, not
-            // just the error path) so the first measurement after any
-            // restart takes _onMeasurement's fabricated-100ms dt branch
-            // instead of computing a dt spanning the entire dead interval,
-            // which the state machine would otherwise credit in full to
-            // open or closed time despite nothing having been measured.
-            root._lastTickAt = 0
             if (exitCode !== 0 && root.active) {
                 ToastService?.showError("MouthGuard detector exited: " + exitCode)
                 root._stopSession()
+                return
+            }
+            // The process exited while the session is meant to continue --
+            // e.g. the `running: root.active` binding restarting a process
+            // that died on its own without root.active ever changing. The
+            // replacement begins from a cold camera and, for dlib, a ~1s
+            // model reload: mark the same pending-reconciliation gap the
+            // auto-pause path uses (freeze _lastTickAt, flag paused) rather
+            // than discarding the interval with the old `_lastTickAt = 0`.
+            // The replacement process's first real measurement will credit
+            // the whole dead span to totalUnmeasuredMs via
+            // _onMeasurement/_reconcileGap, instead of crediting it to
+            // nothing (the old behaviour) or letting it leak into open/
+            // closed time under one huge dt.
+            if (root.active && root._lastTickAt) {
+                root.paused = true
+                root.mouthState = "paused"
             }
         }
     }
