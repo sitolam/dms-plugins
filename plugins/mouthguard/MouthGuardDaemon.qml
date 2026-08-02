@@ -82,6 +82,10 @@ PluginComponent {
     property real _noFaceSince: 0
     property real _sessionStart: 0
 
+    // Most-recent-first, capped at 30 entries. Populated from
+    // Component.onCompleted and appended to by _saveSession().
+    property var history: []
+
     function toggle() {
         if (active) {
             _stopSession()
@@ -111,9 +115,46 @@ PluginComponent {
         if (paused) _reconcileGap(now)
         SM.finish(_sm, now)
         _publishStats()
+        // Must come after finish()/_publishStats() above, not before: those
+        // are what flush the last in-progress open event into
+        // _sm.totalOpenMs/openEvents. Saving history first would silently
+        // drop that final event from the persisted record -- the exact bug
+        // two earlier fix rounds were spent eliminating (see _reconcileGap's
+        // comment for the related finish()-ordering bug this mirrors).
+        _saveSession()
         active = false
         paused = false
         mouthState = "inactive"
+    }
+
+    // Appends the just-ended session to `history` (most-recent-first, capped
+    // at 30) and persists it. Only ever called from _stopSession(), after
+    // SM.finish()/_publishStats() have already run -- see the comment at
+    // that call site.
+    //
+    // `wallClockMs` is deliberately not named `durationMs`: _reconcileGap
+    // credits auto-pause and detector-restart gaps to totalUnmeasuredMs, so
+    // openMs + closedMs can legitimately fall short of the session's real
+    // wall-clock span whenever a pause occurred. Naming the wall-clock field
+    // plainly, and storing unmeasuredMs alongside openMs/closedMs, keeps a
+    // future reader (Task 14's chart, Task 16's CC tile) from mistaking one
+    // for the other.
+    function _saveSession() {
+        if (!_sessionStart) return
+        const measured = _sm.totalOpenMs + _sm.totalClosedMs
+        // A session with nothing measured is noise, not history.
+        if (measured < 1000) return
+
+        const entry = {
+            start: _sessionStart,
+            wallClockMs: Date.now() - _sessionStart,
+            openMs: _sm.totalOpenMs,
+            closedMs: _sm.totalClosedMs,
+            unmeasuredMs: _sm.totalUnmeasuredMs,
+            events: _sm.openEvents.length
+        }
+        history = [entry].concat(history).slice(0, 30)
+        pluginService?.savePluginState(pluginId, "history", history)
     }
 
     // Credits an interval during which tick() was never called -- an
@@ -390,6 +431,7 @@ PluginComponent {
         const next = Object.assign({}, pluginService.pluginInstances)
         next[pluginId] = root
         pluginService.pluginInstances = next
+        history = pluginService.loadPluginState(pluginId, "history", [])
         // Resume whatever the last session state was.
         active = pluginService.loadPluginData(pluginId, "active", false)
         if (active) resetSession()
