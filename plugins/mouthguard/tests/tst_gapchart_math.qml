@@ -1,57 +1,52 @@
 import QtQuick
 import QtTest
+import "../GapChartMath.js" as GapChartMath
 
-// GapChart.qml is a plain Canvas that imports qs.Common (for Theme), which
-// is only resolvable inside a running DMS shell -- it is not on this repo's
-// dev-shell QML_IMPORT_PATH (see flake.nix), so it cannot be instantiated
-// here. This file re-implements, byte-for-byte, the pure scaling/mapping
-// math from GapChart.qml's onPaint (maxGap floor + in-window max, xOf,
-// yOf, and the maxGap<=0 bailout) so that arithmetic can be checked without
-// a display. Keep this in sync with GapChart.qml if that math changes.
+// GapChart.qml itself imports qs.Common (for Theme), which is only
+// resolvable inside a running DMS shell -- it is not on this repo's dev
+// shell QML_IMPORT_PATH (see flake.nix), so the Canvas component cannot be
+// instantiated here. GapChartMath.js has no such dependency (no QML types,
+// no Theme, no Canvas), so this test imports and exercises the exact same
+// file GapChart.qml calls from onPaint -- not a copy of it.
 TestCase {
     name: "GapChartMath"
 
-    // Mirrors GapChart.qml onPaint exactly, up to the point of issuing
-    // canvas draw calls. Returns null if painting would bail out (empty
-    // points or degenerate scale), otherwise the computed maxGap, the
-    // threshold's y position, and the {x, y} of every in-window point in
-    // the same order onPaint would draw them.
-    function computeChart(points, threshold, windowMs, width, height) {
+    property real threshold: 3.5
+    property int windowMs: 60000
+    property real w: 300
+    property real h: 100
+
+    // Mirrors the shape of GapChart.qml's onPaint driving code (computing
+    // t0, calling computeMaxGap/xOf/yOf), but every number comes from the
+    // shared module -- editing GapChartMath.js changes what this returns.
+    function computeChart(points, thresholdVal, windowMsVal, width, height) {
         if (!points || points.length === 0)
             return null
 
         const now = points[points.length - 1].t
-        const t0 = now - windowMs
+        const t0 = now - windowMsVal
 
-        let maxGap = threshold * 1.4
-        for (let i = 0; i < points.length; i++) {
-            const p = points[i]
-            if (p.t < t0)
-                continue
-            if (p.gap > maxGap)
-                maxGap = p.gap
-        }
+        const maxGap = GapChartMath.computeMaxGap(points, thresholdVal, windowMsVal, t0)
         if (maxGap <= 0)
             return null
-
-        const xOf = t => (t - t0) / windowMs * width
-        const yOf = g => height - (g / maxGap) * height
 
         const trace = []
         for (let i = 0; i < points.length; i++) {
             const p = points[i]
             if (p.t < t0)
                 continue
-            trace.push({ x: xOf(p.t), y: yOf(p.gap) })
+            trace.push({
+                x: GapChartMath.xOf(p.t, t0, windowMsVal, width),
+                y: GapChartMath.yOf(p.gap, maxGap, height)
+            })
         }
 
-        return { maxGap: maxGap, thresholdY: yOf(threshold), trace: trace }
+        return {
+            maxGap: maxGap,
+            thresholdY: GapChartMath.yOf(thresholdVal, maxGap, height),
+            trace: trace
+        }
     }
-
-    property real threshold: 3.5
-    property int windowMs: 60000
-    property real w: 300
-    property real h: 100
 
     function test_empty_array_bails_out() {
         const r = computeChart([], threshold, windowMs, w, h)
@@ -69,9 +64,10 @@ TestCase {
         const r = computeChart([{ t: 1000, gap: 2.0 }], threshold, windowMs, w, h)
         verify(r !== null)
         compare(r.trace.length, 1)
-        // threshold*1.4 floor == 4.9, threshold/maxGap == 3.5/4.9 -> 71.4% up
-        fuzzyCompare(r.maxGap, 4.9, 0.001)
-        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 4.9, 0.001)
+        // floor = threshold*1.4 = 4.9, padded by 1.05 -> maxGap = 5.145.
+        // threshold/maxGap = 3.5/5.145 -> 68.0% from bottom.
+        fuzzyCompare(r.maxGap, 5.145, 0.001)
+        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 5.145, 0.001)
     }
 
     function test_all_zero_points_do_not_divide_by_zero_and_threshold_is_visible() {
@@ -80,7 +76,7 @@ TestCase {
             pts.push({ t: i * 200, gap: 0.0 })
         const r = computeChart(pts, threshold, windowMs, w, h)
         verify(r !== null)
-        fuzzyCompare(r.maxGap, 4.9, 0.001)
+        fuzzyCompare(r.maxGap, 5.145, 0.001)
         // All points sit at the bottom edge, threshold clearly above them.
         for (let i = 0; i < r.trace.length; i++)
             fuzzyCompare(r.trace[i].y, h, 0.001)
@@ -93,20 +89,21 @@ TestCase {
         const pts = band.map((g, i) => ({ t: i * 200, gap: g }))
         const r = computeChart(pts, threshold, windowMs, w, h)
         verify(r !== null)
-        // Max sample (4.1) is under the 4.9 floor, so the floor -- not the
-        // data -- sets the scale.
-        fuzzyCompare(r.maxGap, 4.9, 0.001)
-        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 4.9, 0.001)
+        // Max sample (4.1) is under the 4.9 floor, so the padded floor --
+        // not the data -- sets the scale: 4.9 * 1.05 = 5.145.
+        fuzzyCompare(r.maxGap, 5.145, 0.001)
+        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 5.145, 0.001)
     }
 
     function test_points_straddling_threshold_rescale_to_observed_max() {
         // Real calibrated ajar band: median 4.0, range 2.9-5.0. Top of the
-        // band (5.0) exceeds the 4.9 floor, so maxGap should track it.
+        // band (5.0) exceeds the 4.9 floor, so maxGap should track it,
+        // then get the same 1.05 headroom pad: 5.0 * 1.05 = 5.25.
         const band = [2.9, 3.4, 3.5, 3.6, 4.0, 4.0, 4.5, 5.0, 3.2, 3.9]
         const pts = band.map((g, i) => ({ t: i * 200, gap: g }))
         const r = computeChart(pts, threshold, windowMs, w, h)
         verify(r !== null)
-        fuzzyCompare(r.maxGap, 5.0, 0.001)
+        fuzzyCompare(r.maxGap, 5.25, 0.001)
     }
 
     function test_stale_points_outside_window_are_excluded_from_scale_and_trace() {
@@ -120,18 +117,27 @@ TestCase {
         const r = computeChart(pts, threshold, windowMs, w, h)
         verify(r !== null)
         compare(r.trace.length, 2)
-        fuzzyCompare(r.maxGap, 4.9, 0.001)
+        // In-window max (2.5) is still under the floor, so the padded
+        // floor (4.9 * 1.05 = 5.145) sets the scale, not the excluded
+        // spike.
+        fuzzyCompare(r.maxGap, 5.145, 0.001)
     }
 
-    function test_open_mouth_band_scales_to_observed_max_and_peak_touches_top() {
+    function test_open_mouth_band_scales_to_observed_max_with_headroom() {
         // Real calibrated open band: median 6.0, range 4.5-6.4.
         const band = [4.5, 5.0, 5.8, 6.0, 6.0, 6.2, 6.4, 5.5, 6.1, 4.8]
         const pts = band.map((g, i) => ({ t: i * 200, gap: g }))
         const r = computeChart(pts, threshold, windowMs, w, h)
         verify(r !== null)
-        fuzzyCompare(r.maxGap, 6.4, 0.001)
-        // Threshold stays in the middle of the frame rather than pinned to
-        // an edge: 3.5/6.4 -> ~54.7% up.
-        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 6.4, 0.001)
+        // Observed max (6.4) exceeds the floor, padded: 6.4 * 1.05 = 6.72.
+        fuzzyCompare(r.maxGap, 6.72, 0.001)
+        // Threshold stays well clear of both edges: 3.5/6.72 -> ~52.1% up.
+        fuzzyCompare(r.thresholdY / h, 1 - 3.5 / 6.72, 0.001)
+        // The peak sample (6.4, index 6 in `band`) no longer touches the
+        // very top edge (y=0): it lands at height*(1 - 6.4/6.72) -- about
+        // 4.76% down from the top -- thanks to the headroom pad.
+        const peak = r.trace[6]
+        verify(peak.y > 0)
+        fuzzyCompare(peak.y / h, 1 - 6.4 / 6.72, 0.001)
     }
 }

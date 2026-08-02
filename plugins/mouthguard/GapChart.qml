@@ -1,10 +1,13 @@
 import QtQuick
 import qs.Common
+import "GapChartMath.js" as GapChartMath
 
 // Scrolling plot of the measured lip gap against the alert threshold.
 // `points` is replaced wholesale by the daemon several times a second
 // (gapHistory), so onPaint must stay cheap: no per-point allocations,
-// two flat passes over the array, nothing retained between frames.
+// two flat passes over the array, nothing retained between frames. The
+// scaling/mapping math lives in GapChartMath.js so it can be unit-tested
+// without qs.Common on the import path; onPaint only does drawing.
 Canvas {
     id: root
 
@@ -28,28 +31,16 @@ Canvas {
         const now = points[points.length - 1].t
         const t0 = now - windowMs
 
-        // Scale to the taller of the threshold and the in-window data, so
-        // the threshold line is always on screen even when the mouth never
-        // opens (the common case). Only points inside the window count
-        // toward the max -- an old spike that has already scrolled off
-        // must not keep squashing the trace that is still visible.
-        let maxGap = threshold * 1.4
-        for (let i = 0; i < points.length; i++) {
-            const p = points[i]
-            if (p.t < t0)
-                continue
-            if (p.gap > maxGap)
-                maxGap = p.gap
-        }
         // Degenerate scale (threshold <= 0 and nothing in-window above it):
         // bail rather than divide by zero. A legitimate gap of 0.0 (mouth
         // fully closed) does not trigger this -- maxGap is floored by the
-        // threshold term above whenever threshold > 0.
+        // threshold term whenever threshold > 0.
+        const maxGap = GapChartMath.computeMaxGap(points, threshold, windowMs, t0)
         if (maxGap <= 0)
             return
 
-        const xOf = t => (t - t0) / windowMs * width
-        const yOf = g => height - (g / maxGap) * height
+        const xOf = t => GapChartMath.xOf(t, t0, windowMs, width)
+        const yOf = g => GapChartMath.yOf(g, maxGap, height)
 
         // Threshold reference line.
         ctx.save()
