@@ -10,19 +10,21 @@ import qs.Modules.Plugins
 // value`, and DankSlider itself declares `property int value` and rounds
 // every drag/wheel update with Math.round(). Neither exposes `from`, `to`,
 // or `stepSize` -- those are not real properties on this component in this
-// DMS version; every SliderSetting below uses the real API (`minimum` /
-// `maximum`, whole-number defaultValue) instead.
+// DMS version. Every SliderSetting below uses the real API (`minimum` /
+// `maximum`, whole-number defaultValue), and the two settings that need
+// finer-than-1 real-world resolution (threshold, alertDelay) are given
+// integer-native units instead of a custom control, so the stock component
+// can be used everywhere:
 //
-// The threshold control is the one place that cannot tolerate int
-// truncation: mouthguard_core.DEFAULT_THRESHOLD and
-// MouthGuardDaemon.DEFAULT_THRESHOLD are both 3.5 exactly (see
-// CALIBRATION.md), and a rounded 3 or 4 default here would disagree with
-// the daemon as soon as this page is opened and a value is saved -- the
-// exact "settings page and daemon disagree" bug this task exists to avoid.
-// It is hand-built from DankSlider directly, storing tenths internally
-// (10-100 representing 1.0-10.0 gap units) and converting on load/save, so
-// the real number persisted under the "threshold" key is always the exact
-// value the daemon compares against.
+//   - threshold is stored in TENTHS of a gap-unit (pixel). The calibrated
+//     internal default is 3.5 (mouthguard_core.DEFAULT_THRESHOLD /
+//     MouthGuardDaemon.DEFAULT_THRESHOLD, see CALIBRATION.md); stored here
+//     as 35. MouthGuardDaemon.qml divides pluginData.threshold by 10 to
+//     recover the real value -- see the comment at that read site.
+//   - alertDelay is stored in MILLISECONDS, not seconds, so its native
+//     0-10s / 0.1s-step range (ported from the original web app) becomes a
+//     natural 0-10000 integer range. MouthGuardDaemon.qml reads it directly
+//     as ms with no `* 1000` -- see the comment at that read site.
 PluginSettings {
     pluginId: "mouthGuard"
 
@@ -37,94 +39,29 @@ PluginSettings {
         defaultValue: "/dev/video0"
     }
 
-    // Custom control -- see file header. Mirrors the load/save contract
-    // every other setting here uses (walk up `parent` for a PluginSettings
-    // ancestor, then call its saveValue/loadValue), just with a
-    // real-gap-units <-> int-tenths conversion in between so the slider can
-    // move the "threshold" pluginData value in 0.1 steps.
-    Column {
-        id: thresholdSetting
-        width: parent.width
-        spacing: Theme.spacingS
-
-        readonly property real scale: 10
-        readonly property real minReal: 1.0
-        readonly property real maxReal: 10.0
-        readonly property real defaultValue: 3.5
-        property real value: defaultValue
-        property bool isInitialized: false
-
-        function findSettings() {
-            let item = parent
-            while (item) {
-                if (item.saveValue !== undefined && item.loadValue !== undefined)
-                    return item
-                item = item.parent
-            }
-            return null
-        }
-
-        function loadValue() {
-            const settings = findSettings()
-            if (settings && settings.pluginService) {
-                value = settings.loadValue("threshold", defaultValue)
-                isInitialized = true
-            }
-        }
-
-        Component.onCompleted: loadValue()
-
-        onValueChanged: {
-            if (!isInitialized) return
-            const settings = findSettings()
-            if (settings) settings.saveValue("threshold", value)
-        }
-
-        StyledText {
-            text: "Sensitivity threshold"
-            font.pixelSize: Theme.fontSizeMedium
-            font.weight: Font.Medium
-            color: Theme.surfaceText
-        }
-
-        StyledText {
-            text: "Lip gap that counts as open, in the detector's own gap units " +
-                  "(see CALIBRATION.md) -- not pixels or a percentage. Lower is " +
-                  "more sensitive. Current: " + thresholdSetting.value.toFixed(1) +
-                  ". Calibrated default: " + thresholdSetting.defaultValue.toFixed(1) + "."
-            font.pixelSize: Theme.fontSizeSmall
-            color: Theme.surfaceVariantText
-            width: parent.width
-            wrapMode: Text.WordWrap
-        }
-
-        DankSlider {
-            width: parent.width
-            minimum: Math.round(thresholdSetting.minReal * thresholdSetting.scale)
-            maximum: Math.round(thresholdSetting.maxReal * thresholdSetting.scale)
-            value: Math.round(thresholdSetting.value * thresholdSetting.scale)
-            unit: ""
-            wheelEnabled: false
-            thumbOutlineColor: Theme.withAlpha(Theme.surfaceContainerHighest, Theme.popupTransparency)
-            onSliderValueChanged: newValue => {
-                thresholdSetting.value = newValue / thresholdSetting.scale
-            }
-        }
+    SliderSetting {
+        settingKey: "threshold"
+        label: "Sensitivity threshold"
+        // Stored in tenths of a gap-unit -- see file header. Calibrated
+        // internal default is 3.5 (mouthguard_core.DEFAULT_THRESHOLD);
+        // stored/shown here as 35.
+        description: "Lip gap that counts as open, on a 10-100 sensitivity scale (see CALIBRATION.md). Lower is more sensitive. Calibrated default 35."
+        minimum: 10
+        maximum: 100
+        defaultValue: 35
+        unit: ""
     }
 
     SliderSetting {
         settingKey: "alertDelay"
         label: "Detection window"
-        // Whole seconds, not the brief's 0.1s step -- SliderSetting has no
-        // fractional support in this DMS version (see file header). This is
-        // an acceptable simplification here, unlike threshold: the default
-        // (1) is exactly 1.0, so it cannot disagree with the daemon's
-        // fallback the way a rounded threshold default would.
-        description: "Mouth must stay open this long, in whole seconds, to be detected and trigger an alert"
+        // Stored in milliseconds -- see file header. This is finer than the
+        // original web app's 0.1s step (100ms), not coarser.
+        description: "Mouth must stay open this long to be detected and trigger an alert"
         minimum: 0
-        maximum: 10
-        defaultValue: 1
-        unit: " s"
+        maximum: 10000
+        defaultValue: 1000
+        unit: "ms"
     }
 
     ToggleSetting {

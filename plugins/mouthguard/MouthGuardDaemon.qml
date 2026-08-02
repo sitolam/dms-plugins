@@ -13,8 +13,21 @@ PluginComponent {
 
     // --- settings, mirrored from pluginData -------------------------------
     readonly property string device: pluginData?.device ?? "/dev/video0"
-    readonly property real threshold: pluginData?.threshold ?? DEFAULT_THRESHOLD
-    readonly property real alertDelayMs: (pluginData?.alertDelay ?? 1.0) * 1000
+    // MouthGuardSettings.qml's threshold slider is int-only (DMS 1.5.3
+    // SliderSetting/DankSlider have no fractional step -- see that file's
+    // header comment) and stores TENTHS of a gap-unit so a stock slider can
+    // reach the calibrated 3.5 default (35 stored, e.g. minimum 10 =
+    // threshold 1.0). Divide by 10 here to recover the real px-scale value
+    // DEFAULT_THRESHOLD and the rest of this file operate in; the unset
+    // fallback multiplies DEFAULT_THRESHOLD back up first so both paths
+    // land on the exact same 3.5.
+    readonly property real threshold: (pluginData?.threshold ?? (DEFAULT_THRESHOLD * 10)) / 10
+    // MouthGuardSettings.qml's alertDelay slider stores MILLISECONDS
+    // directly (again to stay on DMS's integer-only slider, and to exceed
+    // rather than lose the original web app's 0.1s/100ms step) -- read as
+    // ms with no `* 1000` here. Default 1000 matches that slider's default
+    // exactly.
+    readonly property real alertDelayMs: pluginData?.alertDelay ?? 1000
     readonly property bool distComp: pluginData?.distanceCompensation ?? true
     readonly property string soundType: pluginData?.soundType ?? "soft"
     readonly property real volume: (pluginData?.volume ?? 85) / 100
