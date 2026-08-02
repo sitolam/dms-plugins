@@ -230,4 +230,62 @@ PluginComponent {
             }
         }
     }
+
+    // -- Control Center tile -------------------------------------------
+    // Properties verified against PluginComponent.qml and the shipped
+    // ControlCenterDetailExample plugin (both read-only references) --
+    // ccWidgetIcon/PrimaryText/SecondaryText/IsActive, onCcWidgetToggled
+    // and ccDetailContent all exist with the types used below.
+    //
+    // mouthState has five values; secondary text distinguishes each so a
+    // paused session (auto-pause on lock/idle/suspend) never reads as
+    // "off" or as a live "Tracking" state.
+    ccWidgetIcon: root.iconFor[root.mouthState]
+    ccWidgetPrimaryText: "MouthGuard"
+    ccWidgetSecondaryText: {
+        if (!root.daemon?.active) return "Off"
+        if (root.mouthState === "paused") return "Paused"
+        if (root.mouthState === "noface") return "No face"
+        return root.mouthState === "open" ? "Mouth open" : "Tracking"
+    }
+    ccWidgetIsActive: root.daemon?.active ?? false
+
+    onCcWidgetToggled: root.daemon?.toggle()
+
+    // The space reserved for the detail panel is driven by ccDetailHeight
+    // (default 250 -- see PluginComponent.qml and
+    // ControlCenter/utils/detailHeight.js), NOT by any implicitHeight set
+    // on the ccDetailContent root: DetailHost's Loader is given an
+    // explicit height computed from this property before the content is
+    // ever loaded. Sized to what the chart + stats row actually need so
+    // the panel isn't left with ~90px of dead space at the default 250.
+    ccDetailHeight: 160
+
+    ccDetailContent: Component {
+        Rectangle {
+            implicitHeight: 160
+            color: Theme.surfaceContainerHigh
+            radius: Theme.cornerRadius
+
+            Column {
+                anchors.fill: parent
+                anchors.margins: Theme.spacingM
+                spacing: Theme.spacingS
+
+                GapChart {
+                    width: parent.width
+                    height: 90
+                    points: root.daemon?.gapHistory ?? []
+                    threshold: root.daemon?.threshold ?? 0
+                }
+
+                StyledText {
+                    text: "Open " + root._fmt(root.daemon?.sessionStats.openMs)
+                        + "   Events " + (root.daemon?.sessionStats.events ?? 0)
+                    color: Theme.surfaceText
+                    font.pixelSize: Theme.fontSizeSmall
+                }
+            }
+        }
+    }
 }
