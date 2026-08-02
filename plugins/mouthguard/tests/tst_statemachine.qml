@@ -330,4 +330,73 @@ TestCase {
         compare(s.openEvents[0], 601000)                      // full honest duration, not clamped
         compare(s.totalOpenMs, 601000)
     }
+
+    // --- Fix round 1 (Task 12 auto-pause): ordering matters when
+    // reconciling a gap where tick() was never called at all ---
+
+    function test_pause_reconcile_closes_before_crediting_the_gap() {
+        // MouthGuardDaemon.qml's _reconcileGap credits an auto-pause (or a
+        // detector-restart gap -- tick() is never called at all during
+        // either) to totalUnmeasuredMs on resume. Doing that with a single
+        // no-face tick whose dt truthfully equals the whole gap does NOT
+        // work: an honest dt makes boundEventEnd's clamp inert (it only
+        // ever guards a caller passing a SMALL dt across a large clock
+        // jump -- see test_honest_long_dt_tick_is_not_clamped just above),
+        // so the in-progress open event would close at the resume
+        // timestamp and swallow the entire gap as "open". The fix is
+        // ordering: close the event at the LAST OBSERVED moment via
+        // finish() first, THEN credit the gap as unmeasured -- mirrored
+        // here exactly as the daemon does it.
+        //
+        // Derivation of the expected numbers (not reverse-engineered from
+        // the implementation):
+        //   now=100,  dt=100,  isOpen=true -> rawOpenSince=100, unconfirmed
+        //     (openDur = 100-100 = 0 < delay 1000).
+        //   now=1100, dt=1000, isOpen=true -> openDur = 1100-100 = 1000 >=
+        //     delay(1000), confirms. currentOpenStart = 100. This tick's
+        //     own (now, dt) -- (1100, 1000) -- become previousNow/
+        //     previousDt, i.e. the last REAL observation.
+        //   totalClosedMs after these two ticks = 100 (accrued before
+        //     confirmation; the retro-credit then moves the confirmed
+        //     window's 1000ms to totalOpenMs and clamps totalClosedMs back
+        //     down: max(0, 100+1000-1000) = 100).
+        //   totalOpenMs after these two ticks = 1000 (the retro-credited
+        //     window).
+        //   Auto-pause: no tick() calls at all for 600000ms (10 minutes).
+        //   Resume at wall-clock 601100 = 1100 + 600000.
+        //   finish(s, 1100): bound = min(1100, previousNow(1100) +
+        //     previousDt(1000)) = min(1100, 2100) = 1100. duration = bound
+        //     - currentOpenStart = 1100 - 100 = 1000 -- the recorded event
+        //     is exactly the OBSERVED open span, not the gap.
+        //   tick(now=601100, dt=601100-1100=600000, hasFace:false):
+        //     mouthOpen is already false (finish() just closed it), so
+        //     only totalUnmeasuredMs += 600000 happens; no second event.
+        //   accounted = totalOpenMs(1000) + totalClosedMs(100) +
+        //     totalUnmeasuredMs(600000) = 601100 = resume wall-clock
+        //     (session started at now=0) -- reconciles exactly.
+        var s = make()
+        feed(s, { now: 100, dt: 100, isOpen: true })
+        feed(s, { now: 1100, dt: 1000, isOpen: true })       // confirms, currentOpenStart=100
+        compare(s.mouthOpen, true)
+        compare(s.totalOpenMs, 1000)
+        compare(s.totalClosedMs, 100)
+
+        var lastTickAt = 1100
+        var resumeNow = lastTickAt + 600000                  // simulated ~10 minute pause
+
+        var finishEvents = SM.finish(s, lastTickAt)
+        var tickEvents = feed(s, {
+            now: resumeNow, dt: resumeNow - lastTickAt, isOpen: false, hasFace: false
+        })
+
+        verify(finishEvents.indexOf("closed") >= 0)
+        compare(s.openEvents.length, 1)
+        compare(s.openEvents[0], 1000)                       // observed duration -- NOT ~601000
+        compare(s.mouthOpen, false)
+        compare(s.totalOpenMs, 1000)
+        compare(s.totalClosedMs, 100)
+        compare(s.totalUnmeasuredMs, 600000)
+        compare(s.totalOpenMs + s.totalClosedMs + s.totalUnmeasuredMs, resumeNow)
+        compare(tickEvents.length, 0)                        // no-face tick makes no further claim
+    }
 }

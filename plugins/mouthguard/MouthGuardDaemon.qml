@@ -124,8 +124,24 @@ PluginComponent {
     // now - previousNow" caller contract exactly: nothing else advances the
     // state machine's clock while paused is true, because _onMeasurement
     // drops every stray in-flight line for as long as shouldPause holds.
+    //
+    // Order matters here. finish() MUST run first, closing any in-progress
+    // open event at the last OBSERVED moment (_lastTickAt), before the
+    // no-face tick below claims the gap as unmeasured. Folding both into a
+    // single no-face tick with an honest dt would instead close the event
+    // at `now` -- at the far end of the gap -- because boundEventEnd's
+    // clamp is deliberately inert for a caller that tells the truth about
+    // dt (an honest caller needs no bounding), and a large, honest dt is
+    // exactly what this call passes. That would turn a lock/idle/sleep
+    // span into a fabricated multi-hour open event: the exact bug this
+    // task exists to prevent, just relocated instead of fixed. Once
+    // finish() has closed it, mouthOpen is already false, so the no-face
+    // tick's own close branch has nothing left to do -- it only credits dt
+    // to totalUnmeasuredMs, which is the correct, and only, claim to make
+    // about time nothing was observed.
     function _reconcileGap(now) {
         if (_lastTickAt) {
+            SM.finish(_sm, _lastTickAt)
             SM.tick(_sm, {
                 now: now, dt: now - _lastTickAt,
                 isOpen: false, hasFace: false, delay: alertDelayMs
