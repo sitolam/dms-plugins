@@ -361,15 +361,52 @@ PluginComponent {
 
     SoundEffectWrapper { id: sound }
 
+    // --- shared detector-command resolution rule ---------------------------
+    // The ROUTING here (same two candidates, same order) MUST stay identical
+    // to StartupCheck.qml's `_checkScript` -- copy any change to the
+    // candidates/order over here too. A startup check that approves a
+    // different command than the one launched below is worse than no check
+    // at all: it lets the plugin activate and then die immediately.
+    //
+    //   1. <pluginDir>/result/bin/mouthguard-detector -- the flake-built
+    //      wrapper (`nix build .#detector` inside the plugin directory).
+    //      Self-contained: bundles the pinned interpreter, cv2 and dlib, so
+    //      it needs nothing from the ambient environment.
+    //   2. python3 <pluginDir>/detector.py -- portable fallback, for distros
+    //      where cv2 and dlib are installed system-wide for python3.
+    //
+    // `dir` is trusted (it comes from pluginService.getPluginPath, DMS's own
+    // plugin directory), so no extra quoting/escaping is done beyond the
+    // plain double-quotes already needed for spaces in the path. Unlike
+    // StartupCheck.qml's `_checkScript`, this one does NOT add `exec 2>&1`
+    // (stdout here is the detector's JSON measurement protocol -- see the
+    // SplitParser below -- and must stay separate from stderr, see the
+    // StdioCollector below, or real diagnostics would silently stop
+    // reaching console.warn) and does NOT gate the python3 branch on an
+    // explicit `import cv2, dlib` (StartupCheck already refused activation
+    // if that would fail; a real import error here surfaces naturally via
+    // this Process's normal nonzero-exit handling in onExited below).
+    function _resolveScript(dir) {
+        return 'W="' + dir + '/result/bin/mouthguard-detector"; ' +
+               'if [ -x "$W" ]; then exec "$W" "$@"; ' +
+               'else exec python3 "' + dir + '/detector.py" "$@"; fi'
+    }
+
+    readonly property string _pluginDir: pluginService?.getPluginPath(pluginId) ?? ""
+
     Process {
         id: detector
         running: root.active
         // Required so detector.write() below can reach the process's stdin
-        // -- that's how "pause"/"resume" are delivered.
+        // -- that's how "pause"/"resume" are delivered. `sh -c '... exec
+        // ...'` below preserves this: exec replaces the shell's process
+        // image in place (same PID, same inherited fds) with whichever
+        // command _resolveScript picked, rather than spawning a child of the
+        // shell, so stdin/stdout stay wired straight through to it.
         stdinEnabled: true
         command: [
-            "python3", pluginService.getPluginPath(root.pluginId) + "/detector.py",
-            "--device", root.device, "--fps", String(root.fps)
+            "sh", "-c", root._resolveScript(root._pluginDir),
+            "sh", "--device", root.device, "--fps", String(root.fps)
         ]
 
         stdout: SplitParser {

@@ -17,16 +17,37 @@ leaves your machine.
 ## Requirements
 
 - **DMS** `>=1.5.0` (see `plugin.json`)
-- **python3** with the **`cv2`** (OpenCV) and **`dlib`** modules
+- A working detector command — either of:
+  - the flake-built wrapper (`nix build .#detector`), **required on NixOS** — see below, or
+  - **python3** with the **`cv2`** (OpenCV) and **`dlib`** modules installed system-wide
 - The dlib 68-point face landmark model, `shape_predictor_68_face_landmarks.dat` (~95 MB /
   99.7 MB on disk)
 
-`StartupCheck.qml` probes `python3 -c 'import cv2, dlib'` when the plugin loads and reports a
-per-distro install hint inline if it fails. The model file is resolved separately at detector
-start time (see [The landmark model](#the-landmark-model) below) and is **not**
-covered by that startup check.
+**On NixOS, the system `python3` will not have `cv2`/`dlib`** — there is no "system install" for
+them here — so `nix build .#detector` inside the plugin directory is the supported path, not an
+alternative. `StartupCheck.qml` and `MouthGuardDaemon.qml` share one resolution rule: use
+`<plugin dir>/result/bin/mouthguard-detector` if it exists and is executable, otherwise fall back
+to `python3 <plugin dir>/detector.py`. The startup check runs whichever of those it picks with
+`--self-test` and requires a real `"ready"` response — a stale `result` symlink (e.g. its nix
+store path was garbage-collected) is treated as broken, not silently trusted — and reports an
+inline hint covering both the Nix and per-distro cases if that fails. The model file is resolved
+separately at detector start time (see [The landmark model](#the-landmark-model) below) and is
+**not** covered by that startup check.
+
+**`result` is gitignored.** A fresh clone has no detector command until you build one — see
+below.
 
 ### Install the Python dependencies
+
+**Nix (NixOS, or anyone who wants the pinned/self-contained build):** from the plugin directory —
+```bash
+nix build .#detector
+```
+This produces `result -> /nix/store/.../mouthguard-detector`, a self-contained wrapper bundling
+the pinned interpreter, `dlib`, `opencv4`, `numpy`, and `face-recognition-models` (which supplies
+the landmark model). `nix develop -c python3 detector.py --self-test` also works, for a quick
+check without building the wrapper, but the daemon itself needs the `result` build to exist —
+plain `python3` on NixOS's ambient interpreter has neither module.
 
 **Arch:**
 ```bash
@@ -41,12 +62,6 @@ sudo dnf install python3-opencv python3-dlib
 **Debian / Ubuntu:**
 ```bash
 sudo apt install python3-opencv python3-dlib
-```
-
-**Nix:** use the flake bundled in this repo instead of a system install — it pins `dlib`,
-`opencv4`, `numpy`, and `face-recognition-models` (which supplies the landmark model) together:
-```bash
-nix develop -c python3 detector.py --self-test
 ```
 
 ### The landmark model
@@ -78,6 +93,11 @@ Or manually:
 ```bash
 git clone https://github.com/sitolam/dms-mouthguard ~/.config/DankMaterialShell/plugins/MouthGuard
 ```
+
+Either way, **on NixOS run `nix build .#detector` inside that plugin directory before enabling
+it** — `result` is gitignored, so neither a fresh clone nor a fresh install via the plugin manager
+brings one along, and without it the startup check has only the ambient `python3` fallback to try
+(see [Requirements](#requirements) above).
 
 Then enable it from DMS's plugin settings. `plugin.json` declares `capabilities: ["daemon",
 "dankbar-widget", "control-center"]`, `requires_dms: ">=1.5.0"`, and
