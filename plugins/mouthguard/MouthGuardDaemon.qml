@@ -21,7 +21,7 @@ PluginComponent {
     // DEFAULT_THRESHOLD and the rest of this file operate in; the unset
     // fallback multiplies DEFAULT_THRESHOLD back up first so both paths
     // land on the exact same 3.5.
-    readonly property real threshold: (pluginData?.threshold ?? (DEFAULT_THRESHOLD * 10)) / 10
+    readonly property real threshold: (pluginData?.threshold ?? (defaultThreshold * 10)) / 10
     // MouthGuardSettings.qml's alertDelay slider stores MILLISECONDS
     // directly (again to stay on DMS's integer-only slider, and to exceed
     // rather than lose the original web app's 0.1s/100ms step) -- read as
@@ -53,8 +53,14 @@ PluginComponent {
     // DEFAULT_DISTANCE_REF. These are dlib-scale values and bear no relation
     // to the web app's MediaPipe-scale originals (threshold 5, distance ref
     // 100px) -- do not "round trip" a value between the two apps.
-    readonly property real DEFAULT_THRESHOLD: 3.5
-    readonly property real DISTANCE_REF: 71
+    // NB: camelCase here is mandatory, not style. QML rejects a property whose
+    // name begins with an upper case letter at COMPONENT CREATION time, not at
+    // parse time -- so qmlformat -n accepts SCREAMING_CASE happily and the
+    // shell then refuses to instantiate the daemon with "Property names cannot
+    // begin with an upper case letter". These were DEFAULT_THRESHOLD /
+    // DISTANCE_REF and cost a failed activation to find.
+    readonly property real defaultThreshold: 3.5
+    readonly property real distanceRef: 71
 
     // Minimum spacing between DELIVERED alerts (notification and sound
     // together), independent of alertDelayMs. When the detection window is
@@ -62,7 +68,7 @@ PluginComponent {
     // that must not change -- so without this an alert would fire at the
     // detector's frame rate (roughly 6-10/s), a notification storm. The
     // state machine keeps emitting; only delivery is throttled, here.
-    readonly property real ALERT_MIN_INTERVAL_MS: 2000
+    readonly property real alertMinIntervalMs: 2000
     property real _lastAlertDeliveredAt: 0
 
     // tools/gen_sounds.py peak-normalises each WAV independently, which
@@ -258,7 +264,7 @@ PluginComponent {
 
     function _alert(now) {
         if (alertsMuted) return
-        if (_lastAlertDeliveredAt && now - _lastAlertDeliveredAt < ALERT_MIN_INTERVAL_MS) return
+        if (_lastAlertDeliveredAt && now - _lastAlertDeliveredAt < alertMinIntervalMs) return
         _lastAlertDeliveredAt = now
 
         if (notifications) {
@@ -307,7 +313,7 @@ PluginComponent {
             lastGap = msg.gap
             lastFace = msg.face
             lastAdjGap = (distComp && msg.face > 10)
-                ? msg.gap * (DISTANCE_REF / msg.face) : msg.gap
+                ? msg.gap * (distanceRef / msg.face) : msg.gap
         } else {
             if (!_noFaceSince) _noFaceSince = now
             // Zeroed together, deliberately: leaving lastGap/lastFace at
