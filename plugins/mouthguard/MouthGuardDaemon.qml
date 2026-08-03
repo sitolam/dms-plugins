@@ -453,8 +453,18 @@ PluginComponent {
             }
         }
 
-        stderr: StdioCollector {
-            onTextReceived: text => console.warn("[MouthGuard]", text)
+        // SplitParser, not StdioCollector. Quickshell 0.3.0's StdioCollector
+        // exposes only `text`/`data`/`waitForEnd` plus dataChanged/
+        // streamFinished -- there is no textReceived signal (assigning one
+        // fails at component creation with "Cannot assign to non-existent
+        // property"). streamFinished would also be the wrong tool here: it
+        // fires when the stream ENDS, so a long-running detector's diagnostics
+        // would be withheld until the process exited. SplitParser inherits
+        // read(data) from DataStreamParser and delivers each line as it
+        // arrives, matching how stdout is handled above.
+        stderr: SplitParser {
+            splitMarker: "\n"
+            onRead: data => console.warn("[MouthGuard]", data)
         }
 
         onExited: exitCode => {
