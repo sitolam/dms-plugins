@@ -268,9 +268,27 @@ PluginComponent {
         _lastAlertDeliveredAt = now
 
         if (notifications) {
-            Quickshell.execDetached([
-                "notify-send", "-a", "MouthGuard", "-i", "sentiment_dissatisfied",
-                "MouthGuard", "Close your mouth!"
+            // `dms notify` first, notify-send only as a fallback. notify-send
+            // ships with libnotify, which plenty of systems simply do not have
+            // installed (NixOS without libnotify in the profile, minimal
+            // Arch/Debian installs) -- and Quickshell.execDetached reports
+            // nothing at all when the binary is missing, so the alert silently
+            // never appeared. That is the bug this replaces, and it is
+            // invisible in testing on any machine that happens to have
+            // libnotify. The DMS CLI is by definition present wherever this
+            // plugin runs (it is what launches the shell), and `dms notify`
+            // reaches the very same org.freedesktop.Notifications server DMS
+            // implements, so this is a strictly wider-working path, not a
+            // DMS-specific special case.
+            //
+            // `exec` in the first branch replaces the shell outright, so the
+            // notify-send line is reached only when `dms` is absent.
+            Quickshell.execDetached(["sh", "-c",
+                'if command -v dms >/dev/null 2>&1; then '
+                + 'exec dms notify "$1" "$2" --app MouthGuard '
+                + '--icon sentiment_dissatisfied --timeout 5000; fi; '
+                + 'exec notify-send -a MouthGuard -i sentiment_dissatisfied "$1" "$2"',
+                "sh", "MouthGuard", "Close your mouth!"
             ])
         }
         if (soundType !== "none") {
@@ -498,8 +516,9 @@ PluginComponent {
         next[pluginId] = root
         pluginService.pluginInstances = next
         history = pluginService.loadPluginState(pluginId, "history", [])
-        // Resume whatever the last session state was.
-        active = pluginService.loadPluginData(pluginId, "active", false)
+        // Resume whatever the last session state was. Plugin STATE, not
+        // plugin DATA -- see onActiveChanged.
+        active = pluginService.loadPluginState(pluginId, "active", false)
         if (active) resetSession()
     }
 
@@ -511,5 +530,17 @@ PluginComponent {
         pluginService.pluginInstances = next
     }
 
-    onActiveChanged: pluginService?.savePluginData(pluginId, "active", active)
+    // savePluginState, NOT savePluginData -- the two are not interchangeable
+    // and the difference is why "detection was on" used to be forgotten across
+    // a shell restart. savePluginData routes through SettingsData into
+    // ~/.config/DankMaterialShell/plugin_settings.json, the file that holds the
+    // user's DECLARED settings; anyone managing their dotfiles declaratively
+    // (home-manager, chezmoi, a read-only /nix symlink) has that file
+    // unwritable, and DMS's FileView there sets printErrors: false, so the
+    // write fails without a single log line. savePluginState writes
+    // ~/.local/state/DankMaterialShell/plugins/<id>_state.json instead, which
+    // DMS creates and owns -- the same file `history` above already persists
+    // to successfully. Whether it is on is runtime state, not a setting the
+    // user configured, so it belongs there on the merits too.
+    onActiveChanged: pluginService?.savePluginState(pluginId, "active", active)
 }

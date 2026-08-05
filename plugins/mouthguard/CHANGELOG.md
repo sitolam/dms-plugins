@@ -2,6 +2,24 @@
 
 All notable changes to the MouthGuard DMS plugin are documented here.
 
+## [Unreleased]
+
+### Fixed
+
+- Desktop notifications never appeared on systems without `libnotify`. Alerts shelled out to
+  `notify-send`, which is not part of a base install on NixOS and several minimal distros, and
+  `Quickshell.execDetached` gives no indication when the binary is missing — the notification
+  simply went nowhere, silently. Alerts now go through `dms notify` (the DMS CLI, which is
+  necessarily present wherever this plugin runs, and reaches the same
+  `org.freedesktop.Notifications` server), falling back to `notify-send` only where `dms` is not
+  on `PATH`.
+- Detection no longer switches itself off when the shell restarts. The active flag was saved with
+  `savePluginData` rather than its look-alike `savePluginState`, and so landed in
+  `~/.config/DankMaterialShell/plugin_settings.json` — a file that is read-only for anyone
+  managing their dotfiles declaratively (home-manager, chezmoi, a `/nix/store` symlink), where
+  DMS's own `FileView` suppresses the resulting error. It is now stored as plugin *state*
+  alongside session history, in a file DMS creates and owns.
+
 ## [0.1.0] — 2026-08-02
 
 Initial release. A native DankMaterialShell port of the browser-based MouthGuard
