@@ -1,9 +1,11 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 import qs.Common
 import qs.Widgets
 import "MenuModel.js" as MenuModel
+import "Search.js" as Search
 
 PanelWindow {
     id: root
@@ -31,27 +33,55 @@ PanelWindow {
     readonly property var breadcrumb: MenuModel.breadcrumb(tree, currentId)
     readonly property string headerTitle: currentId && tree.nodes[currentId] ? tree.nodes[currentId].title : "Menu"
 
-    function rowsFor(id) {
-        const kids = MenuModel.childrenOf(tree, id);
-        const out = [];
-        for (let i = 0; i < kids.length; i++) {
-            out.push({
-                id: kids[i].id,
-                label: kids[i].label,
-                icon: kids[i].icon,
-                comment: "",
-                kind: MenuModel.kindOf(kids[i]),
+    // Empty query: this level's children, in tree order. Non-empty: every
+    // runnable leaf at or below this level, ranked, each captioned with where
+    // it lives. That makes the root a command palette without a separate mode.
+    function rowsFor(id, q) {
+        if (!q) {
+            const kids = MenuModel.childrenOf(tree, id);
+            const out = [];
+            for (let i = 0; i < kids.length; i++) {
+                out.push({
+                    id: kids[i].id,
+                    label: kids[i].label,
+                    icon: kids[i].icon,
+                    comment: "",
+                    kind: MenuModel.kindOf(kids[i]),
+                    checked: false,
+                    disabled: false
+                });
+            }
+            return out;
+        }
+
+        const leaves = MenuModel.leavesUnder(tree, id);
+        const entries = [];
+        for (let i = 0; i < leaves.length; i++) {
+            const crumbs = MenuModel.breadcrumb(tree, leaves[i].parent);
+            entries.push({
+                id: leaves[i].id,
+                label: leaves[i].label,
+                icon: leaves[i].icon,
+                comment: crumbs.join("  \u203a  "),
+                kind: MenuModel.kindOf(leaves[i]),
+                aliases: leaves[i].aliases,
                 checked: false,
                 disabled: false
             });
         }
-        return out;
+        return Search.rank(q, entries);
     }
 
     function showLevel(id) {
         currentId = id;
         query = "";
-        list.rows = rowsFor(id);
+        searchInput.text = "";
+        list.rows = rowsFor(id, "");
+        list.currentIndex = 0;
+    }
+
+    onQueryChanged: {
+        list.rows = rowsFor(currentId, query);
         list.currentIndex = 0;
     }
 
@@ -72,8 +102,46 @@ PanelWindow {
             showLevel(row.id);
             return;
         }
-        // Leaves execute in the next task.
+        run(row);
+    }
+
+    function run(row) {
+        const node = tree.nodes[row.id];
+        if (!node) {
+            console.warn("dankMenu: no node for row", row.id);
+            closeMenu();
+            return;
+        }
+
+        if (node.action) {
+            const proc = actionProcess.createObject(root, {
+                script: node.action
+            });
+            proc.running = true;
+        } else if (node.target) {
+            Qt.openUrlExternally(node.target);
+        }
+
         closeMenu();
+    }
+
+    Component {
+        id: actionProcess
+
+        Process {
+            property string script: ""
+
+            // bash -lc, not a bare exec: menu actions are shell text. Omarchy's
+            // use pipes, $(...), && and quoting freely, and the schema
+            // compatibility this plugin keeps is only real if that still works.
+            command: ["bash", "-lc", script]
+
+            onExited: exitCode => {
+                if (exitCode !== 0)
+                    console.warn("dankMenu: action exited", exitCode, "-", script);
+                destroy();
+            }
+        }
     }
 
     // Escape and Left pop a level; at the root they close. The query belongs
@@ -134,48 +202,6 @@ PanelWindow {
             anchors.fill: parent
             focus: root.menuVisible
 
-            Keys.onPressed: event => {
-                switch (event.key) {
-                case Qt.Key_Escape:
-                case Qt.Key_Left:
-                    root.pop();
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Return:
-                case Qt.Key_Enter:
-                case Qt.Key_Right:
-                    root.enter(list.rows[list.currentIndex]);
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Down:
-                    list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
-                    event.accepted = true;
-                    break;
-                case Qt.Key_Up:
-                    list.currentIndex = Math.max(list.currentIndex - 1, 0);
-                    event.accepted = true;
-                    break;
-                case Qt.Key_N:
-                    if (event.modifiers & Qt.ControlModifier) {
-                        list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
-                        event.accepted = true;
-                    }
-                    break;
-                case Qt.Key_P:
-                    if (event.modifiers & Qt.ControlModifier) {
-                        list.currentIndex = Math.max(list.currentIndex - 1, 0);
-                        event.accepted = true;
-                    }
-                    break;
-                case Qt.Key_Backspace:
-                    if (root.query === "") {
-                        root.pop();
-                        event.accepted = true;
-                    }
-                    break;
-                }
-            }
-
             Rectangle {
                 id: card
 
@@ -219,6 +245,92 @@ PanelWindow {
                         text: root.headerTitle
                         color: Theme.surfaceText
                         font.pixelSize: Theme.fontSizeLarge
+                    }
+
+                    Rectangle {
+                        width: parent.width
+                        height: 36
+                        radius: Theme.cornerRadius
+                        color: Theme.surfaceContainerHigh
+
+                        TextInput {
+                            id: searchInput
+
+                            anchors.fill: parent
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.rightMargin: Theme.spacingM
+                            verticalAlignment: TextInput.AlignVCenter
+                            color: Theme.surfaceText
+                            font.pixelSize: Theme.fontSizeMedium
+                            clip: true
+                            // The field holds focus while the menu is open, so
+                            // typing filters immediately; the FocusScope's Keys
+                            // handler still sees navigation keys first.
+                            focus: root.menuVisible
+                            onTextChanged: root.query = text
+
+                            // Navigation lives on the field, not on an ancestor:
+                            // a focused TextInput consumes Left/Right/Backspace
+                            // for editing, so an ancestor Keys handler would
+                            // never see them. Left and Backspace only navigate
+                            // when there is no text to edit, and Right only when
+                            // the cursor has nowhere further to go -- otherwise
+                            // they do the editing thing the user expects.
+                            Keys.onPressed: event => {
+                                switch (event.key) {
+                                case Qt.Key_Escape:
+                                    root.pop();
+                                    event.accepted = true;
+                                    break;
+                                case Qt.Key_Return:
+                                case Qt.Key_Enter:
+                                    root.enter(list.rows[list.currentIndex]);
+                                    event.accepted = true;
+                                    break;
+                                case Qt.Key_Right:
+                                    if (searchInput.cursorPosition === searchInput.text.length) {
+                                        root.enter(list.rows[list.currentIndex]);
+                                        event.accepted = true;
+                                    }
+                                    break;
+                                case Qt.Key_Left:
+                                case Qt.Key_Backspace:
+                                    if (searchInput.text === "") {
+                                        root.pop();
+                                        event.accepted = true;
+                                    }
+                                    break;
+                                case Qt.Key_Down:
+                                    list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
+                                    event.accepted = true;
+                                    break;
+                                case Qt.Key_Up:
+                                    list.currentIndex = Math.max(list.currentIndex - 1, 0);
+                                    event.accepted = true;
+                                    break;
+                                case Qt.Key_N:
+                                    if (event.modifiers & Qt.ControlModifier) {
+                                        list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
+                                        event.accepted = true;
+                                    }
+                                    break;
+                                case Qt.Key_P:
+                                    if (event.modifiers & Qt.ControlModifier) {
+                                        list.currentIndex = Math.max(list.currentIndex - 1, 0);
+                                        event.accepted = true;
+                                    }
+                                    break;
+                                }
+                            }
+
+                            StyledText {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: searchInput.text === ""
+                                text: "Search"
+                                color: Theme.surfaceVariantText
+                                font.pixelSize: Theme.fontSizeMedium
+                            }
+                        }
                     }
 
                     MenuList {

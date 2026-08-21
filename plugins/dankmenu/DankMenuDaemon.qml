@@ -10,9 +10,38 @@ PluginComponent {
 
     property var popoutService: null
 
-    // A later task replaces this with the bundled menu.jsonc / the menuPath
-    // override. Until then it is enough tree to navigate.
-    readonly property var tree: MenuModel.parse('{' + '"style": {"icon":"palette","label":"Style"},' + '"style.theme": {"icon":"colorize","label":"Theme"},' + '"system": {"icon":"power_settings_new","label":"System","aliases":["power-menu"]},' + '"system.lock": {"icon":"lock","label":"Lock","action":"loginctl lock-session"},' + '"system.reboot": {"icon":"restart_alt","label":"Reboot","action":"systemctl reboot"}' + '}')
+    // "" means the tree bundled with the plugin. A Nix-managed config points
+    // this at a generated file; a hand install leaves it alone and gets the
+    // default.
+    readonly property string menuPath: (pluginData && pluginData.menuPath) || ""
+
+    property var tree: ({
+            nodes: {},
+            roots: [],
+            aliases: {},
+            orphans: []
+        })
+
+    FileView {
+        id: menuFile
+
+        path: root.menuPath !== "" ? root.menuPath : Qt.resolvedUrl("menu.jsonc").toString().replace("file://", "")
+        watchChanges: true
+
+        onFileChanged: reload()
+
+        onLoaded: {
+            try {
+                root.tree = MenuModel.parse(text());
+                if (root.tree.orphans.length > 0)
+                    console.warn("dankMenu: orphaned ids in menu file:", root.tree.orphans.join(", "));
+            } catch (e) {
+                console.warn("dankMenu: cannot parse menu file", path, "-", e);
+            }
+        }
+
+        onLoadFailed: console.warn("dankMenu: cannot read menu file", path)
+    }
 
     // The window is built on first open, not at shell startup: a daemon plugin
     // is instantiated with the shell, and an unopened menu should cost nothing
@@ -63,6 +92,7 @@ PluginComponent {
         }
 
         function refresh(): string {
+            menuFile.reload();
             return "DANKMENU_REFRESHED";
         }
     }

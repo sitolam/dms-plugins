@@ -1,0 +1,62 @@
+{
+  // dankMenu's default tree.
+  //
+  // Schema is omarchy's (basecamp/omarchy, default/omarchy/omarchy-menu.jsonc):
+  // object keys are dotted ids, hierarchy is implied by the dots, and the kind
+  // of a row is inferred from its fields -- `action` makes an action, `target`
+  // a link, `provider` a provider-backed submenu, anything else a submenu.
+  // Rows may also carry `aliases`, `title`, `iconFont`, and the `when` /
+  // `checked` / `disabled` shell conditions.
+  //
+  // Omarchy's own tree is Arch and Hyprland shaped: `install` and `remove`
+  // drive pacman, most of `setup` edits ~/.config/hypr/*.lua. This tree keeps
+  // their spine and replaces the mechanism, targeting DMS's IPC surface so it
+  // works on any compositor DMS supports. `install` and `remove` are absent on
+  // purpose: on a declarative system, adding a package means editing the
+  // config, which `setup.config` opens.
+  //
+  // A Nix-managed install overrides this whole file via the `menuPath`
+  // setting, so machine-specific paths belong there rather than here.
+
+  // Root
+  "apps": {"icon":"apps","label":"Apps","aliases":["app","applications"],"provider":"apps"},
+  "learn": {"icon":"school","label":"Learn"},
+  "trigger": {"icon":"bolt","label":"Trigger"},
+  "style": {"icon":"palette","label":"Style"},
+  "setup": {"icon":"settings","label":"Setup","aliases":["settings"]},
+  "system": {"icon":"power_settings_new","label":"System","aliases":["power-menu"]},
+
+  // Learn
+  "learn.keybinds": {"icon":"keyboard","label":"Keybinds","aliases":["keys","bindings"],"action":"dms ipc call keybinds open niri"},
+  "learn.niri": {"icon":"grid_view","label":"Niri","target":"https://github.com/YaLTeR/niri/wiki"},
+  "learn.nixos": {"icon":"menu_book","label":"NixOS Manual","target":"https://nixos.org/manual/nixos/stable/"},
+  "learn.home-manager": {"icon":"home","label":"Home Manager Options","target":"https://nix-community.github.io/home-manager/options.xhtml"},
+  "learn.packages": {"icon":"search","label":"Search Packages","target":"https://search.nixos.org/packages"},
+
+  // Trigger
+  "trigger.capture": {"icon":"screenshot_region","label":"Capture","aliases":["screenshot","screenrecord"],"action":"dms ipc call screenCaptureToolbar toggle"},
+  "trigger.clipboard": {"icon":"content_paste","label":"Clipboard","aliases":["clip"],"action":"dms ipc call clipboard toggle"},
+  "trigger.notepad": {"icon":"edit_note","label":"Notepad","aliases":["notes"],"action":"dms ipc call notepad toggle"},
+  "trigger.emoji": {"icon":"mood","label":"Emoji","aliases":["emoji","emojis"],"action":"dms ipc call spotlight toggleQuery ':e '"},
+  "trigger.toggle": {"icon":"toggle_on","label":"Toggle","aliases":["toggle","toggles"]},
+  "trigger.toggle.idle": {"icon":"coffee","label":"Stay Awake","aliases":["caffeine","inhibit"],"action":"dms ipc call inhibit toggle"},
+  "trigger.toggle.night": {"icon":"nightlight","label":"Night Mode","aliases":["nightlight"],"action":"dms ipc call night toggle"},
+
+  // Style
+  "style.theme": {"icon":"colorize","label":"Theme","aliases":["theme","themes","colors"],"action":"dms ipc call settings focusOrToggleWith theme"},
+  "style.wallpaper": {"icon":"wallpaper","label":"Wallpaper","aliases":["background","wall"],"action":"dms ipc call settings focusOrToggleWith wallpaper"},
+  "style.bar": {"icon":"width_normal","label":"Bar","aliases":["topbar"],"action":"dms ipc call settings focusOrToggleWith dankbar"},
+
+  // Setup
+  "setup.displays": {"icon":"monitor","label":"Displays","aliases":["monitors","screens"],"action":"dms ipc call settings focusOrToggleWith displays"},
+  "setup.network": {"icon":"wifi","label":"Network","aliases":["wifi","wlan"],"action":"dms ipc call settings focusOrToggleWith network"},
+  "setup.control-center": {"icon":"tune","label":"Control Center","aliases":["audio","bluetooth"],"action":"dms ipc call control-center toggle"},
+  "setup.settings": {"icon":"settings","label":"All Settings","action":"dms ipc call settings open"},
+
+  // System
+  "system.lock": {"icon":"lock","label":"Lock","action":"loginctl lock-session"},
+  "system.suspend": {"icon":"bedtime","label":"Suspend","action":"systemctl suspend"},
+  "system.logout": {"icon":"logout","label":"Logout","action":"loginctl terminate-session \"$XDG_SESSION_ID\""},
+  "system.reboot": {"icon":"restart_alt","label":"Reboot","action":"systemctl reboot"},
+  "system.shutdown": {"icon":"power_settings_new","label":"Shutdown","action":"systemctl poweroff"},
+}
