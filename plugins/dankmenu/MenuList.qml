@@ -7,6 +7,7 @@ ListView {
 
     // rows: [{ id, label, icon, kind, comment, checked, disabled }]
     property var rows: []
+    property int iconSize: 22
 
     signal activated(var row)
 
@@ -49,17 +50,37 @@ ListView {
             anchors.rightMargin: Theme.spacingS
             spacing: Theme.spacingM
 
-            DankIcon {
+            // Two renderers, because the two kinds of icon are unrelated:
+            // menu rows name a Material Symbols glyph ("school", "wifi"),
+            // while app rows name an icon-theme entry ("firefox"). DankIcon
+            // only draws the former -- handing it a theme name renders
+            // nothing at all.
+            Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: delegateRoot.modelData.icon !== ""
-                name: delegateRoot.modelData.icon
-                size: Theme.fontSizeLarge
-                color: delegateRoot.contentColor
+                width: visible ? root.iconSize : 0
+                height: root.iconSize
+
+                DankIcon {
+                    anchors.centerIn: parent
+                    visible: delegateRoot.modelData.kind !== "app"
+                    name: delegateRoot.modelData.icon
+                    size: Theme.fontSizeLarge
+                    color: delegateRoot.contentColor
+                }
+
+                AppIconRenderer {
+                    anchors.fill: parent
+                    visible: delegateRoot.modelData.kind === "app"
+                    iconValue: delegateRoot.modelData.icon
+                    iconSize: root.iconSize
+                    fallbackText: delegateRoot.modelData.label.length > 0 ? delegateRoot.modelData.label.charAt(0).toUpperCase() : "?"
+                }
             }
 
             Column {
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - (delegateRoot.modelData.icon !== "" ? Theme.fontSizeLarge + Theme.spacingM : 0)
+                width: parent.width - (delegateRoot.modelData.icon !== "" ? root.iconSize + Theme.spacingM : 0)
 
                 StyledText {
                     width: parent.width

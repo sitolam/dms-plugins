@@ -7,9 +7,19 @@
     "author": "sitolam",
     "icon": "menu_open",
     "type": "daemon",
-    "capabilities": ["daemon", "ipc"],
+    "capabilities": [
+        "daemon",
+        "ipc"
+    ],
     "component": "./DankMenuDaemon.qml",
+    "settings": "./DankMenuSettings.qml",
     "requires_dms": ">=1.5.0",
-    "compositors": ["any"],
-    "permissions": ["settings_read", "settings_write", "process"]
+    "compositors": [
+        "any"
+    ],
+    "permissions": [
+        "settings_read",
+        "settings_write",
+        "process"
+    ]
 }

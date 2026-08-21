@@ -62,6 +62,32 @@
         default = mouthguard-detector;
       });
 
+      checks = forAll (pkgs: {
+        # dankMenu's core is plain JavaScript with no QML type imports, so the
+        # suites run headless here rather than only in a dev shell.
+        dankmenu-qml = pkgs.runCommand "dankmenu-qml-tests"
+          {
+            nativeBuildInputs = [ pkgs.qt6.qtdeclarative ];
+          }
+          ''
+            export QML_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml"
+            export QML2_IMPORT_PATH="$QML_IMPORT_PATH"
+            # The sandbox has no display, and qmltestrunner wants a platform
+            # plugin even for tests that never instantiate a window.
+            export QT_QPA_PLATFORM=offscreen
+            # Without a writable cache dir fontconfig floods stderr and buries
+            # the actual test output.
+            export XDG_CACHE_HOME="$PWD/.cache"
+            mkdir -p "$XDG_CACHE_HOME"
+            cp -r ${./plugins/dankmenu} dankmenu
+            for t in dankmenu/tests/tst_*.qml; do
+              echo "== $t"
+              qmltestrunner -input "$t"
+            done
+            touch $out
+          '';
+      });
+
       devShells = forAll (pkgs: {
         default = pkgs.mkShell {
           packages = [
