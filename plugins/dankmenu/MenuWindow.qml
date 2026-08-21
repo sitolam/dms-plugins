@@ -18,6 +18,12 @@ PanelWindow {
     property string currentId: ""
     property string query: ""
 
+    // How many rows are visible before the list starts scrolling. The card
+    // hugs its content below that, so a two-row menu is a two-row card rather
+    // than a fixed pane with a hole in it.
+    readonly property int rowHeight: 44
+    readonly property int maxVisibleRows: 9
+
     // Not `closed`: PanelWindow already has a signal by that name, and the
     // override is silently rejected.
     signal menuClosed
@@ -95,16 +101,28 @@ PanelWindow {
     WlrLayershell.exclusiveZone: -1
     WlrLayershell.keyboardFocus: menuVisible ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
+    // Compositor-side blur behind the card only, tracking its rect -- the same
+    // treatment DMS gives its own modals, so the menu doesn't read as a flat
+    // slab pasted over the desktop.
+    WindowBlur {
+        targetWindow: root
+        blurX: card.x
+        blurY: card.y
+        blurWidth: root.menuVisible ? card.width : 0
+        blurHeight: root.menuVisible ? card.height : 0
+        blurRadius: Theme.cornerRadius
+    }
+
     // Backdrop and content share one container so the two are obviously
     // siblings under a single root, which is how DMS's own layershell modals
     // are laid out (Modals/DankLauncherV2: a content root holding a FocusScope).
     Item {
         anchors.fill: parent
 
-        // Dimmed backdrop; clicking it closes, as omarchy's menu does.
+        // Dim the desktop; clicking it closes, as omarchy's menu does.
         Rectangle {
             anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0.45)
+            color: Qt.rgba(0, 0, 0, 0.35)
 
             MouseArea {
                 anchors.fill: parent
@@ -159,13 +177,18 @@ PanelWindow {
             }
 
             Rectangle {
+                id: card
+
                 anchors.centerIn: parent
-                width: Math.min(720, parent.width - Theme.spacingXL * 2)
-                height: Math.min(520, parent.height - Theme.spacingXL * 2)
+                width: Math.min(560, parent.width - Theme.spacingXL * 2)
+                height: Math.min(content.implicitHeight + Theme.spacingM * 2, parent.height - Theme.spacingXL * 2)
                 radius: Theme.cornerRadius
-                color: Theme.surfaceContainer
+                // readableSurface is surfaceContainer at the popup transparency
+                // the user has configured -- opaque enough to read against, sheer
+                // enough for the blur behind it to show through.
+                color: Theme.readableSurface
                 border.width: 1
-                border.color: Theme.outline
+                border.color: Theme.outlineVariant
 
                 // Swallow clicks so they don't reach the backdrop.
                 MouseArea {
@@ -173,13 +196,19 @@ PanelWindow {
                 }
 
                 Column {
-                    anchors.fill: parent
+                    id: content
+
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
                     anchors.margins: Theme.spacingM
                     spacing: Theme.spacingS
 
                     StyledText {
                         width: parent.width
-                        text: root.breadcrumb.length ? root.breadcrumb.join("  ›  ") : "Menu"
+                        visible: root.breadcrumb.length > 0
+                        height: visible ? implicitHeight : 0
+                        text: root.breadcrumb.join("  ›  ")
                         color: Theme.surfaceVariantText
                         font.pixelSize: Theme.fontSizeSmall
                         elide: Text.ElideLeft
@@ -196,7 +225,8 @@ PanelWindow {
                         id: list
 
                         width: parent.width
-                        height: parent.height - y
+                        // Hug the rows until there are more than fit, then scroll.
+                        height: Math.min(contentHeight, root.rowHeight * root.maxVisibleRows)
                         onActivated: row => root.enter(row)
                     }
                 }
