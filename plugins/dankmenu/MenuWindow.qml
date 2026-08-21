@@ -6,6 +6,7 @@ import qs.Common
 import qs.Widgets
 import "MenuModel.js" as MenuModel
 import "Search.js" as Search
+import "Conditions.js" as ConditionsJs
 
 PanelWindow {
     id: root
@@ -37,18 +38,25 @@ PanelWindow {
     // runnable leaf at or below this level, ranked, each captioned with where
     // it lives. That makes the root a command palette without a separate mode.
     function rowsFor(id, q) {
+        const node = id ? tree.nodes[id] : null;
+        if (node && node.provider === "apps")
+            return Search.rank(q || "", appSource.entries());
+
         if (!q) {
             const kids = MenuModel.childrenOf(tree, id);
             const out = [];
             for (let i = 0; i < kids.length; i++) {
+                const state = ConditionsJs.applyTo(kids[i], conditions.results);
+                if (!state.visible)
+                    continue;
                 out.push({
                     id: kids[i].id,
                     label: kids[i].label,
                     icon: kids[i].icon,
                     comment: "",
                     kind: MenuModel.kindOf(kids[i]),
-                    checked: false,
-                    disabled: false
+                    checked: state.checked,
+                    disabled: state.disabled
                 });
             }
             return out;
@@ -57,6 +65,9 @@ PanelWindow {
         const leaves = MenuModel.leavesUnder(tree, id);
         const entries = [];
         for (let i = 0; i < leaves.length; i++) {
+            const state = ConditionsJs.applyTo(leaves[i], conditions.results);
+            if (!state.visible)
+                continue;
             const crumbs = MenuModel.breadcrumb(tree, leaves[i].parent);
             entries.push({
                 id: leaves[i].id,
@@ -65,11 +76,21 @@ PanelWindow {
                 comment: crumbs.join("  \u203a  "),
                 kind: MenuModel.kindOf(leaves[i]),
                 aliases: leaves[i].aliases,
-                checked: false,
-                disabled: false
+                checked: state.checked,
+                disabled: state.disabled
             });
         }
+        // At the root a query reaches apps as well, so one keystroke sequence
+        // finds either a command or a program. Inside a submenu it does not:
+        // the level is the scope.
+        if (!id)
+            entries.push.apply(entries, appSource.entries());
+
         return Search.rank(q, entries);
+    }
+
+    AppSource {
+        id: appSource
     }
 
     function showLevel(id) {
@@ -78,11 +99,29 @@ PanelWindow {
         searchInput.text = "";
         list.rows = rowsFor(id, "");
         list.currentIndex = 0;
+        evaluateConditions();
     }
 
     onQueryChanged: {
         list.rows = rowsFor(currentId, query);
         list.currentIndex = 0;
+        evaluateConditions();
+    }
+
+    // A search reaches the whole subtree, so its conditions are the subtree's;
+    // an unfiltered level only needs its own children.
+    function evaluateConditions() {
+        const nodes = query ? MenuModel.leavesUnder(tree, currentId) : MenuModel.childrenOf(tree, currentId);
+        conditions.clear();
+        conditions.evaluate(nodes);
+    }
+
+    Conditions {
+        id: conditions
+
+        onSettled: {
+            list.rows = root.rowsFor(root.currentId, root.query);
+        }
     }
 
     function openAt(route) {
@@ -106,6 +145,12 @@ PanelWindow {
     }
 
     function run(row) {
+        if (row.kind === "app") {
+            appSource.launch(row);
+            closeMenu();
+            return;
+        }
+
         const node = tree.nodes[row.id];
         if (!node) {
             console.warn("dankMenu: no node for row", row.id);

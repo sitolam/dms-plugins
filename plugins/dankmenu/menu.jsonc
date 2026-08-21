@@ -39,8 +39,10 @@
   "trigger.notepad": {"icon":"edit_note","label":"Notepad","aliases":["notes"],"action":"dms ipc call notepad toggle"},
   "trigger.emoji": {"icon":"mood","label":"Emoji","aliases":["emoji","emojis"],"action":"dms ipc call spotlight toggleQuery ':e '"},
   "trigger.toggle": {"icon":"toggle_on","label":"Toggle","aliases":["toggle","toggles"]},
-  "trigger.toggle.idle": {"icon":"coffee","label":"Stay Awake","aliases":["caffeine","inhibit"],"action":"dms ipc call inhibit toggle"},
-  "trigger.toggle.night": {"icon":"nightlight","label":"Night Mode","aliases":["nightlight"],"action":"dms ipc call night toggle"},
+  "trigger.toggle.idle": {"icon":"coffee","label":"Stay Awake","aliases":["caffeine","inhibit"],"checked":"dms ipc call inhibit status | grep -q enabled","action":"dms ipc call inhibit toggle"},
+  "trigger.toggle.night": {"icon":"nightlight","label":"Night Mode","aliases":["nightlight"],"checked":"dms ipc call night status | grep -q enabled","action":"dms ipc call night toggle"},
+  // Laptop-only: `when` hides this row entirely on a desktop.
+  "trigger.toggle.battery": {"icon":"battery_std","label":"Battery Percentage","when":"test -d /sys/class/power_supply/BAT0","action":"dms ipc call bar toggle"},
 
   // Style
   "style.theme": {"icon":"colorize","label":"Theme","aliases":["theme","themes","colors"],"action":"dms ipc call settings focusOrToggleWith theme"},
