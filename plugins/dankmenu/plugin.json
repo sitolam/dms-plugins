@@ -1,0 +1,15 @@
+{
+    "id": "dankMenu",
+    "name": "Dank Menu",
+    "description": "Omarchy-style root menu: one key to every command, with built-in search",
+    "version": "0.1.0",
+    "license": "MIT",
+    "author": "sitolam",
+    "icon": "menu_open",
+    "type": "daemon",
+    "capabilities": ["daemon", "ipc"],
+    "component": "./DankMenuDaemon.qml",
+    "requires_dms": ">=1.5.0",
+    "compositors": ["any"],
+    "permissions": ["settings_read", "settings_write", "process"]
+}
