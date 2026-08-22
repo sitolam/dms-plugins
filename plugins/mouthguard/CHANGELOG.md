@@ -4,6 +4,35 @@ All notable changes to the MouthGuard DMS plugin are documented here.
 
 ## [Unreleased]
 
+### Changed
+
+- Face tracking moved from dlib to MediaPipe Face Mesh — the same models the web app this plugin
+  was ported from runs (`@mediapipe/face_mesh` 0.4), driven directly through OpenVINO, whose
+  TFLite frontend reads them without a conversion step. This replaces dlib's HOG detector and
+  68-point predictor with BlazeFace plus the 468-point mesh, and fixes the two accuracy problems
+  the dlib port had: faces are found well beyond the roughly 80x80 px floor the HOG detector
+  imposed, and a turned head no longer reads as "no face".
+- Detection now runs on the **NPU** where one is available, falling back to the GPU and then the
+  CPU — including when a device enumerates but fails to compile, which is what an Intel NPU with
+  a driver but no graph compiler does. The chosen device is reported in the `ready` line as
+  `mediapipe/<device>` and can be forced with `--inference-device`. Measured here: 0.6 ms per
+  inference on the NPU, 1.0 ms on the iGPU, 1.5 ms on the CPU.
+- **Calibration is gone, along with `CALIBRATION.md`, `tools/calibrate.py`, and their tests.**
+  The threshold (5.0) and distance-compensation reference (100 px) are the web app's values,
+  carried over with its model, and are meaningful without per-camera tuning: compensation
+  normalises each gap against the user's own nose-to-chin distance in the same frame, so seating
+  distance and camera geometry divide out.
+- The threshold setting key is now `meshThreshold`. A value saved against the dlib pipeline was
+  on a different scale and would be silently misread here, so old settings lapse to the new
+  default instead.
+- The flake fetches both model files, pinned by hash, and assembles the NPU runtime: Intel's NPU
+  graph compiler is not packaged by nixpkgs, and without it OpenVINO enumerates the NPU and then
+  fails every compile with `ZE_RESULT_ERROR_UNSUPPORTED_FEATURE`. It is fetched from the matching
+  `linux-npu-driver` release and placed beside OpenVINO's own libraries, which is the only
+  location OpenVINO will look in.
+- `--detect-interval` is gone. MediaPipe re-runs its detector only when the mesh reports it has
+  lost the face, so there is no interval left to tune.
+
 ### Fixed
 
 - Desktop notifications never appeared on systems without `libnotify`. Alerts shelled out to

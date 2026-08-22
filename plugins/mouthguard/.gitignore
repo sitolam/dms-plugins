@@ -3,4 +3,3 @@ __pycache__/
 .pytest_cache/
 result
 result-*
-calibration-*.csv

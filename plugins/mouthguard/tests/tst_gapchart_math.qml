@@ -84,7 +84,7 @@ TestCase {
     }
 
     function test_closed_mouth_band_stays_below_the_floor_scale() {
-        // Real calibrated closed-mouth band: median 2.0, range 0-4.1.
+        // A recorded closed-mouth band: median 2.0, range 0-4.1.
         const band = [0.0, 1.2, 2.0, 2.0, 2.5, 3.1, 4.1, 1.8, 2.2, 0.5]
         const pts = band.map((g, i) => ({ t: i * 200, gap: g }))
         const r = computeChart(pts, threshold, windowMs, w, h)
@@ -96,7 +96,7 @@ TestCase {
     }
 
     function test_points_straddling_threshold_rescale_to_observed_max() {
-        // Real calibrated ajar band: median 4.0, range 2.9-5.0. Top of the
+        // A recorded ajar band: median 4.0, range 2.9-5.0. Top of the
         // band (5.0) exceeds the 4.9 floor, so maxGap should track it,
         // then get the same 1.05 headroom pad: 5.0 * 1.05 = 5.25.
         const band = [2.9, 3.4, 3.5, 3.6, 4.0, 4.0, 4.5, 5.0, 3.2, 3.9]
@@ -124,7 +124,7 @@ TestCase {
     }
 
     function test_open_mouth_band_scales_to_observed_max_with_headroom() {
-        // Real calibrated open band: median 6.0, range 4.5-6.4.
+        // A recorded open band: median 6.0, range 4.5-6.4.
         const band = [4.5, 5.0, 5.8, 6.0, 6.0, 6.2, 6.4, 5.5, 6.1, 4.8]
         const pts = band.map((g, i) => ({ t: i * 200, gap: g }))
         const r = computeChart(pts, threshold, windowMs, w, h)

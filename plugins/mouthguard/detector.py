@@ -17,8 +17,7 @@ from mouthguard_core import (
     encode_ready,
     face_height,
     lip_gap,
-    resolve_model_path,
-    should_redetect,
+    resolve_model_dir,
 )
 
 
@@ -31,25 +30,23 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(prog="detector.py")
     p.add_argument("--device", default="/dev/video0")
     p.add_argument("--fps", type=int, default=10)
-    p.add_argument("--detect-interval", type=int, default=5)
+    p.add_argument(
+        "--inference-device", default=None,
+        help="OpenVINO device to run the models on (NPU, GPU, CPU). Default "
+             "picks the first available in that order.")
     p.add_argument(
         "--width", type=int, default=640,
-        help="capture width in pixels; the HOG face detector runs at full "
-             "capture resolution, so lowering this shrinks the distance at "
-             "which a face is still large enough (roughly 80x80px) to "
-             "detect")
-    p.add_argument(
-        "--height", type=int, default=480,
-        help="capture height in pixels; see --width -- detection runs at "
-             "capture resolution, so lowering this also shrinks the "
-             "usable seating distance range")
+        help="capture width in pixels; unlike the previous dlib pipeline "
+             "this does not set a floor on usable seating distance -- the "
+             "detector letterboxes every frame down to 128x128 regardless")
+    p.add_argument("--height", type=int, default=480, help="capture height in pixels")
     p.add_argument("--self-test", action="store_true")
     return p.parse_args(argv)
 
 
 def self_test(args):
-    """Emit a valid stream without touching the camera."""
-    emit(encode_ready("dlib", args.device, args.fps))
+    """Emit a valid stream without touching the camera or a model."""
+    emit(encode_ready("mediapipe", args.device, args.fps))
     t0 = time.monotonic()
     for gap in (3.0, 9.5, None):
         emit(encode_measurement(time.monotonic() - t0, gap, 0.0 if gap is None else 118.0))
@@ -74,16 +71,20 @@ def main(argv=None):
         return self_test(args)
 
     import cv2
-    import dlib
+
+    from mouthguard_mesh import FaceMesh
 
     try:
-        model_path = resolve_model_path()
+        model_dir = resolve_model_dir()
     except ModelNotFound as exc:
         emit(encode_error("model_missing", exc))
         return 2
 
-    detector = dlib.get_frontal_face_detector()
-    predictor = dlib.shape_predictor(model_path)
+    try:
+        mesh = FaceMesh(model_dir, args.inference_device)
+    except Exception as exc:  # noqa: BLE001 - any runtime failure is fatal here
+        emit(encode_error("inference_failed", exc))
+        return 4
 
     def open_capture():
         cap = cv2.VideoCapture(args.device, cv2.CAP_V4L2)
@@ -98,12 +99,9 @@ def main(argv=None):
         emit(encode_error("camera_busy", f"{args.device}: cannot open device"))
         return 3
 
-    emit(encode_ready("dlib", args.device, args.fps))
+    emit(encode_ready("mediapipe/" + mesh.device, args.device, args.fps))
 
     paused = False
-    frame_index = 0
-    rect = None
-    points = None
     t0 = time.monotonic()
     period = 1.0 / max(1, args.fps)
 
@@ -117,15 +115,14 @@ def main(argv=None):
                 if cap is not None:
                     cap.release()
                     cap = None
-                rect = None
-                points = None
+                mesh.reset()
             elif cmd == "resume" and paused:
                 cap = open_capture()
                 if cap is None:
                     emit(encode_error(
                         "camera_busy", f"{args.device}: cannot reopen, staying paused"))
                     # Stay paused and keep the process alive: exiting here
-                    # would discard the resident dlib model over a momentary
+                    # would discard the compiled models over a momentary
                     # device-busy blip, which is exactly the cost pause/
                     # resume exists to avoid. A later "resume" can retry.
                 else:
@@ -140,45 +137,17 @@ def main(argv=None):
                 time.sleep(period)
                 continue
 
-            # Both the HOG face detector and the 68-point predictor run on
-            # the full-resolution grayscale frame -- no downscale. dlib's
-            # frontal HOG detector has a minimum detectable face of roughly
-            # 80x80px; a --scale 0.5 downscale (removed) shrank a normal
-            # ~104x103px seated face to ~52x52px, below that floor, so it
-            # silently reported no face at ordinary seating distance. Cost
-            # is acceptable: ~32.5ms per detection at 640x480, amortised to
-            # ~6.5ms/frame at the default --detect-interval 5, well inside
-            # a 100ms budget at 10 fps.
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
-            if should_redetect(frame_index, rect is not None, points, rect,
-                               args.detect_interval):
-                faces = detector(gray, 0)
-                if faces:
-                    # Largest face wins; multi-face tracking is out of scope.
-                    face = max(faces, key=lambda f: f.width() * f.height())
-                    # The detector ran at full resolution already, so its
-                    # rect needs no scaling. Full resolution is the one
-                    # canonical space for the cached rect -- should_redetect
-                    # compares it against `points` below, which are also
-                    # full-resolution, and the two must never drift into
-                    # different spaces.
-                    rect = (face.left(), face.top(), face.right(), face.bottom())
-                else:
-                    rect = None
-                    points = None
-
-            if rect is None:
+            # Face Mesh runs its own two-stage pipeline internally: BlazeFace
+            # only when tracking is lost, the 468-point landmark model every
+            # frame. Both are roughly a millisecond, so unlike the dlib
+            # pipeline this needs no frame-skipping of the detection stage.
+            points = mesh(frame)
+            if points is None:
                 emit(encode_measurement(time.monotonic() - t0, None, 0.0))
             else:
-                shape = predictor(gray, dlib.rectangle(*rect))
-                points = [(shape.part(i).x, shape.part(i).y) for i in range(68)]
-                # Landmarks come back in full-resolution pixels already, so
-                # no scaling is applied before measuring.
                 emit(encode_measurement(
                     time.monotonic() - t0, lip_gap(points), face_height(points)))
 
-            frame_index += 1
             time.sleep(period)
     except KeyboardInterrupt:
         pass

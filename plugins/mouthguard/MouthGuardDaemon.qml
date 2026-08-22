@@ -16,12 +16,18 @@ PluginComponent {
     // MouthGuardSettings.qml's threshold slider is int-only (DMS 1.5.3
     // SliderSetting/DankSlider have no fractional step -- see that file's
     // header comment) and stores TENTHS of a gap-unit so a stock slider can
-    // reach the calibrated 3.5 default (35 stored, e.g. minimum 10 =
-    // threshold 1.0). Divide by 10 here to recover the real px-scale value
+    // reach the 5.0 default (50 stored, e.g. minimum 10 = threshold 1.0).
+    // Divide by 10 here to recover the real px-scale value
     // DEFAULT_THRESHOLD and the rest of this file operate in; the unset
     // fallback multiplies DEFAULT_THRESHOLD back up first so both paths
-    // land on the exact same 3.5.
-    readonly property real threshold: (pluginData?.threshold ?? (defaultThreshold * 10)) / 10
+    // land on the exact same 5.0.
+    //
+    // The KEY is meshThreshold, not threshold: the dlib pipeline this
+    // replaced measured on a different scale (its calibrated default was
+    // 3.5 against a distance reference of 71), so a stored value from that
+    // era would silently mean something else here. A new key lets those
+    // settings lapse to the new default instead of being misread.
+    readonly property real threshold: (pluginData?.meshThreshold ?? (defaultThreshold * 10)) / 10
     // MouthGuardSettings.qml's alertDelay slider stores MILLISECONDS
     // directly (again to stay on DMS's integer-only slider, and to exceed
     // rather than lose the original web app's 0.1s/100ms step) -- read as
@@ -48,19 +54,19 @@ PluginComponent {
         || (IdleService?.monitorsOff ?? false)
     )
 
-    // Calibrated against the real dlib pipeline on the project owner's
-    // hardware; see CALIBRATION.md and mouthguard_core.DEFAULT_THRESHOLD /
-    // DEFAULT_DISTANCE_REF. These are dlib-scale values and bear no relation
-    // to the web app's MediaPipe-scale originals (threshold 5, distance ref
-    // 100px) -- do not "round trip" a value between the two apps.
+    // The web app's values, carried over unchanged along with its model --
+    // see mouthguard_core.DEFAULT_THRESHOLD / DEFAULT_DISTANCE_REF. They
+    // need no per-camera calibration because distanceRef normalises every
+    // gap against the user's own nose-to-chin distance in the same frame,
+    // so seating distance and camera geometry divide out.
     // NB: camelCase here is mandatory, not style. QML rejects a property whose
     // name begins with an upper case letter at COMPONENT CREATION time, not at
     // parse time -- so qmlformat -n accepts SCREAMING_CASE happily and the
     // shell then refuses to instantiate the daemon with "Property names cannot
     // begin with an upper case letter". These were DEFAULT_THRESHOLD /
     // DISTANCE_REF and cost a failed activation to find.
-    readonly property real defaultThreshold: 3.5
-    readonly property real distanceRef: 71
+    readonly property real defaultThreshold: 5.0
+    readonly property real distanceRef: 100
 
     // Minimum spacing between DELIVERED alerts (notification and sound
     // together), independent of alertDelayMs. When the detection window is
@@ -224,9 +230,9 @@ PluginComponent {
 
     // Auto-pause: release the capture device (camera LED off) on lock,
     // idle, screen-off, or sleep preparation, without killing the detector
-    // process -- the whole point is to avoid paying the ~1s dlib model
-    // reload on every lock/unlock. detector.py keeps the model resident and
-    // just stops/starts touching the device (see detector.py's "pause"/
+    // process -- the whole point is to avoid recompiling the models for the
+    // inference device on every lock/unlock. detector.py keeps them resident
+    // and just stops/starts touching the device (see detector.py's "pause"/
     // "resume" stdin commands).
     onShouldPauseChanged: {
         if (!active) return
@@ -394,10 +400,11 @@ PluginComponent {
     //
     //   1. <pluginDir>/result/bin/mouthguard-detector -- the flake-built
     //      wrapper (`nix build .#detector` inside the plugin directory).
-    //      Self-contained: bundles the pinned interpreter, cv2 and dlib, so
-    //      it needs nothing from the ambient environment.
+    //      Self-contained: bundles the pinned interpreter, cv2, OpenVINO,
+    //      the MediaPipe models and the NPU runtime, so it needs nothing
+    //      from the ambient environment.
     //   2. python3 <pluginDir>/detector.py -- portable fallback, for distros
-    //      where cv2 and dlib are installed system-wide for python3.
+    //      where cv2 and openvino are installed system-wide for python3.
     //
     // `dir` is trusted (it comes from pluginService.getPluginPath, DMS's own
     // plugin directory), so no extra quoting/escaping is done beyond the
@@ -407,8 +414,8 @@ PluginComponent {
     // SplitParser below -- and must stay separate from stderr, see the
     // StdioCollector below, or real diagnostics would silently stop
     // reaching console.warn) and does NOT gate the python3 branch on an
-    // explicit `import cv2, dlib` (StartupCheck already refused activation
-    // if that would fail; a real import error here surfaces naturally via
+    // explicit `import cv2, openvino` (StartupCheck already refused
+    // activation if that would fail; a real import error here surfaces via
     // this Process's normal nonzero-exit handling in onExited below).
     function _resolveScript(dir) {
         return 'W="' + dir + '/result/bin/mouthguard-detector"; ' +
@@ -444,8 +451,8 @@ PluginComponent {
                     // A failed resume attempt reports camera_busy too, but
                     // detector.py deliberately stays alive and paused rather
                     // than exiting in that case (see detector.py's "resume"
-                    // branch) -- exiting would discard the resident dlib
-                    // model over what may be a momentary device-busy blip,
+                    // branch) -- exiting would discard the compiled models
+                    // over what may be a momentary device-busy blip,
                     // exactly the cost auto-pause exists to avoid. Every
                     // other error (model missing, the initial camera open
                     // failing) happens before any pause could have occurred,
@@ -494,8 +501,8 @@ PluginComponent {
             // The process exited while the session is meant to continue --
             // e.g. the `running: root.active` binding restarting a process
             // that died on its own without root.active ever changing. The
-            // replacement begins from a cold camera and, for dlib, a ~1s
-            // model reload: mark the same pending-reconciliation gap the
+            // replacement begins from a cold camera and a fresh model
+            // compile (about a second on NPU or GPU): mark the same pending-reconciliation gap the
             // auto-pause path uses (freeze _lastTickAt, flag paused) rather
             // than discarding the interval with the old `_lastTickAt = 0`.
             // The replacement process's first real measurement will credit

@@ -16,11 +16,14 @@ import qs.Modules.Plugins
 // integer-native units instead of a custom control, so the stock component
 // can be used everywhere:
 //
-//   - threshold is stored in TENTHS of a gap-unit (pixel). The calibrated
-//     internal default is 3.5 (mouthguard_core.DEFAULT_THRESHOLD /
-//     MouthGuardDaemon.DEFAULT_THRESHOLD, see CALIBRATION.md); stored here
-//     as 35. MouthGuardDaemon.qml divides pluginData.threshold by 10 to
-//     recover the real value -- see the comment at that read site.
+//   - meshThreshold is stored in TENTHS of a gap-unit (pixel). The internal
+//     default is 5.0 (mouthguard_core.DEFAULT_THRESHOLD /
+//     MouthGuardDaemon.defaultThreshold); stored here as 50.
+//     MouthGuardDaemon.qml divides pluginData.meshThreshold by 10 to
+//     recover the real value -- see the comment at that read site. The key
+//     is meshThreshold rather than plain threshold so values saved against
+//     the old dlib pipeline, which used a different scale, lapse to this
+//     default instead of being reinterpreted -- see the same comment.
 //   - alertDelay is stored in MILLISECONDS, not seconds, so its native
 //     0-10s / 0.1s-step range (ported from the original web app) becomes a
 //     natural 0-10000 integer range. MouthGuardDaemon.qml reads it directly
@@ -40,15 +43,15 @@ PluginSettings {
     }
 
     SliderSetting {
-        settingKey: "threshold"
+        settingKey: "meshThreshold"
         label: "Sensitivity threshold"
-        // Stored in tenths of a gap-unit -- see file header. Calibrated
-        // internal default is 3.5 (mouthguard_core.DEFAULT_THRESHOLD);
-        // stored/shown here as 35.
-        description: "Lip gap that counts as open, on a 10-100 sensitivity scale (see CALIBRATION.md). Lower is more sensitive. Calibrated default 35."
+        // Stored in tenths of a gap-unit -- see file header. Internal
+        // default is 5.0 (mouthguard_core.DEFAULT_THRESHOLD); stored and
+        // shown here as 50.
+        description: "Lip gap that counts as open, on a 10-100 sensitivity scale. Lower is more sensitive. Default 50."
         minimum: 10
         maximum: 100
-        defaultValue: 35
+        defaultValue: 50
         unit: ""
     }
 

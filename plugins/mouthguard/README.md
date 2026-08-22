@@ -5,8 +5,10 @@ your webcam and alerts you when your mouth has been open too long — useful if 
 train yourself into habitual nasal breathing / mouth closure. It is a native port of the
 browser-based app at **[github.com/sitolam/mouthguard](https://github.com/sitolam/mouthguard)**:
 same detection logic and alerting behaviour, reimplemented as a DMS daemon + bar pill instead of a
-page you keep open in a tab. Face tracking runs locally via [dlib](http://dlib.net/); nothing
-leaves your machine.
+page you keep open in a tab. Face tracking runs locally, on the same
+[MediaPipe Face Mesh](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) model
+the web app uses, through [OpenVINO](https://docs.openvino.ai/) — on an Intel NPU where one is
+available, otherwise the iGPU or the CPU. Nothing leaves your machine.
 
 > **Screenshot:** not yet included. Capturing one requires enabling the plugin and opening the
 > popout with a live session running, which this documentation pass deliberately did not do — it
@@ -19,20 +21,21 @@ leaves your machine.
 - **DMS** `>=1.5.0` (see `plugin.json`)
 - A working detector command — either of:
   - the flake-built wrapper (`nix build .#detector`), **required on NixOS** — see below, or
-  - **python3** with the **`cv2`** (OpenCV) and **`dlib`** modules installed system-wide
-- The dlib 68-point face landmark model, `shape_predictor_68_face_landmarks.dat` (~95 MB /
-  99.7 MB on disk)
+  - **python3** with the **`cv2`** (OpenCV) and **`openvino`** modules installed system-wide
+- The two MediaPipe model files, `face_detection_short_range.tflite` (229 KB) and
+  `face_landmark.tflite` (1.2 MB). The flake fetches both; see
+  [The models](#the-models) below for doing it by hand.
 
-**On NixOS, the system `python3` will not have `cv2`/`dlib`** — there is no "system install" for
+**On NixOS, the system `python3` will not have `cv2`/`openvino`** — there is no "system install" for
 them here — so `nix build .#detector` inside the plugin directory is the supported path, not an
 alternative. `StartupCheck.qml` and `MouthGuardDaemon.qml` share one resolution rule: use
 `<plugin dir>/result/bin/mouthguard-detector` if it exists and is executable, otherwise fall back
 to `python3 <plugin dir>/detector.py`. The startup check runs whichever of those it picks with
 `--self-test` and requires a real `"ready"` response — a stale `result` symlink (e.g. its nix
 store path was garbage-collected) is treated as broken, not silently trusted — and reports an
-inline hint covering both the Nix and per-distro cases if that fails. The model file is resolved
-separately at detector start time (see [The landmark model](#the-landmark-model) below) and is
-**not** covered by that startup check.
+inline hint covering both the Nix and per-distro cases if that fails. On the `python3` branch it
+additionally probes the imports and the model directory, because `--self-test` deliberately
+returns before either is touched.
 
 **`result` is gitignored.** A fresh clone has no detector command until you build one — see
 below.
@@ -44,43 +47,70 @@ below.
 nix build .#detector
 ```
 This produces `result -> /nix/store/.../mouthguard-detector`, a self-contained wrapper bundling
-the pinned interpreter, `dlib`, `opencv4`, `numpy`, and `face-recognition-models` (which supplies
-the landmark model). `nix develop -c python3 detector.py --self-test` also works, for a quick
-check without building the wrapper, but the daemon itself needs the `result` build to exist —
-plain `python3` on NixOS's ambient interpreter has neither module.
+the pinned interpreter, `openvino`, `opencv4`, `numpy`, both MediaPipe model files, and the NPU
+runtime (see [Using the NPU](#using-the-npu)). `nix develop -c python3 detector.py --self-test`
+also works, for a quick check without building the wrapper, but the daemon itself needs the
+`result` build to exist — plain `python3` on NixOS's ambient interpreter has neither module.
 
 **Arch:**
 ```bash
-sudo pacman -S python-opencv python-dlib
+sudo pacman -S python-opencv python-openvino
 ```
 
 **Fedora:**
 ```bash
-sudo dnf install python3-opencv python3-dlib
+sudo dnf install python3-opencv python3-openvino
 ```
 
 **Debian / Ubuntu:**
 ```bash
-sudo apt install python3-opencv python3-dlib
+sudo apt install python3-opencv python3-openvino
 ```
 
-### The landmark model
+### The models
 
-`mouthguard_core.resolve_model_path()` looks for `shape_predictor_68_face_landmarks.dat`, in
-order:
+Both files come from MediaPipe's asset bucket, and are the same ones the web app's
+`@mediapipe/face_mesh` 0.4 loads:
 
-1. `face_recognition_models` package, if installed (this is what the bundled Nix flake provides)
-2. `/usr/share/dlib/shape_predictor_68_face_landmarks.dat`
-3. `/usr/share/dlib-models/shape_predictor_68_face_landmarks.dat`
-4. `~/.cache/mouthguard/shape_predictor_68_face_landmarks.dat`
-5. the path in the `MOUTHGUARD_MODEL` environment variable, if set (checked first if present, and
-   raises immediately rather than falling through if it points at a missing file)
+- `face_detection_short_range.tflite` — BlazeFace, finds the face
+- `face_landmark.tflite` — the 468-point mesh, measures the lips
 
-None of Arch, Fedora, or Debian's `python-dlib`/`python3-dlib` packages above bundle this model.
-If your distro doesn't provide it in `/usr/share/dlib*`, download it separately (dlib's own
-[dlib-models](https://github.com/davisking/dlib-models) repository is the canonical upstream
-source) and place it at `~/.cache/mouthguard/shape_predictor_68_face_landmarks.dat`, or set
-`MOUTHGUARD_MODEL` to wherever you put it.
+OpenVINO reads TFLite directly, so neither needs converting.
+`mouthguard_core.resolve_model_dir()` looks for a directory holding **both**, in order:
+
+1. `MOUTHGUARD_MODEL_DIR`, if set (checked first, and raises immediately rather than falling
+   through if that directory is missing either file)
+2. `/usr/share/mouthguard`
+3. `/usr/share/mediapipe/models`
+4. `~/.cache/mouthguard`
+
+The Nix wrapper sets `MOUTHGUARD_MODEL_DIR` to a pinned store path, so nothing else is needed
+there. Otherwise, fetch them by hand:
+
+```bash
+mkdir -p ~/.cache/mouthguard && cd ~/.cache/mouthguard
+curl -LO https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite
+curl -LO https://storage.googleapis.com/mediapipe-assets/face_landmark.tflite
+```
+
+### Using the NPU
+
+The detector asks OpenVINO for an **NPU** first, then a **GPU**, then the **CPU**, and falls
+through to the next one if a device is present but fails to compile the models. Whichever it lands
+on is reported in the `ready` line as `mediapipe/<device>`, and can be forced with
+`--inference-device`. On this machine the three measure at roughly 0.6 ms, 1.0 ms and 1.5 ms per
+inference, against a 100 ms budget at the default 10 fps — so the NPU is a power win, not a
+latency requirement, and there is nothing to fix if you land on GPU or CPU.
+
+Reaching an Intel NPU takes three pieces, all of which the flake wires up for you:
+
+- the kernel driver (`intel_vpu`, giving you `/dev/accel/accel0`) — from your kernel
+- the Level Zero loader and Intel's NPU userspace driver — on NixOS, `level-zero` and
+  `intel-npu-driver` in `hardware.graphics.extraPackages`
+- Intel's NPU graph compiler, which nixpkgs does not package. Without it OpenVINO enumerates the
+  NPU and then fails every compile with `ZE_RESULT_ERROR_UNSUPPORTED_FEATURE`. The flake fetches
+  it from the matching `linux-npu-driver` release and places it beside OpenVINO's own libraries,
+  which is the only place OpenVINO will look for it.
 
 ### Install the plugin
 
@@ -132,12 +162,12 @@ compact version of the same chart plus an Open time / Events summary.
 All settings are edited from DMS's plugin settings panel (`MouthGuardSettings.qml`). Two of them
 are stored in integer-native units rather than their "natural" real-world units — see
 [Why threshold and alertDelay use odd units](#why-threshold-and-alertdelay-use-odd-units) below
-before comparing a stored value against `CALIBRATION.md`.
+before comparing a stored value against anything in the source.
 
 | Setting | Key | Control | Range | Default | Unit |
 |---|---|---|---|---|---|
 | Camera | `device` | selection | `/dev/video0`, `/dev/video1` | `/dev/video0` | — |
-| Sensitivity threshold | `threshold` | slider | 10 – 100 | 35 | tenths of a gap-unit (px) |
+| Sensitivity threshold | `meshThreshold` | slider | 10 – 100 | 50 | tenths of a gap-unit (px) |
 | Detection window | `alertDelay` | slider | 0 – 10000 | 1000 | milliseconds |
 | Distance compensation | `distanceCompensation` | toggle | — | on | — |
 | Alert sound | `soundType` | selection | soft / chime / double / buzz / ping / none | soft | — |
@@ -150,9 +180,12 @@ before comparing a stored value against `CALIBRATION.md`.
 
 Notes on a few of these:
 
-- **Sensitivity threshold** — lower is more sensitive. The calibrated default of 35 corresponds
-  to a real gap of **3.5 px** on this camera; see `CALIBRATION.md` for how that number was
-  derived and `tools/calibrate.py` to re-derive it for your own camera.
+- **Sensitivity threshold** — lower is more sensitive. The default of 50 is a real gap of
+  **5.0 px**, the web app's value, and needs no per-camera calibration: distance compensation
+  normalises every gap against your own nose-to-chin distance in the same frame, so seating
+  distance and camera geometry divide out. The key is `meshThreshold`, not `threshold` — a value
+  saved against the old dlib pipeline meant something else on a different scale, and lapses to
+  this default rather than being reinterpreted.
 - **Detection window** — the mouth must stay open continuously for this entire duration before
   it counts as an "open" event and an alert fires. Briefer openings are discarded — see
   [Statistics and detection semantics](#statistics-and-detection-semantics).
@@ -171,21 +204,22 @@ plain `property int value`, `DankSlider` rounds every drag/wheel update with `Ma
 neither exposes `from`, `to`, or `stepSize` for fractional control. Rather than build a custom
 slider control just for two settings, both were given integer-native units instead:
 
-- **`threshold`** is stored in **tenths of a gap-unit**. The calibrated real value is 3.5 px
-  (`mouthguard_core.DEFAULT_THRESHOLD`); the slider stores and displays `35`.
-  `MouthGuardDaemon.qml` divides `pluginData.threshold` by 10 to recover 3.5.
+- **`meshThreshold`** is stored in **tenths of a gap-unit**. The real value is 5.0 px
+  (`mouthguard_core.DEFAULT_THRESHOLD`); the slider stores and displays `50`.
+  `MouthGuardDaemon.qml` divides `pluginData.meshThreshold` by 10 to recover 5.0.
 - **`alertDelay`** is stored directly in **milliseconds** rather than the original web app's
   0–10 s / 0.1 s-step range. This is finer-grained than the original, not coarser — a plain
   integer millisecond range comfortably exceeds 0.1 s precision. `MouthGuardDaemon.qml` reads it
   as-is, with no `* 1000`.
 
-If you're cross-checking a stored value (e.g. `35` in DMS's saved plugin state) against
-`CALIBRATION.md`'s `3.5`, this is why they don't match at face value — divide by 10.
+If you're cross-checking a stored value (e.g. `50` in DMS's saved plugin state) against
+`DEFAULT_THRESHOLD`'s `5.0`, this is why they don't match at face value — divide by 10.
 
 ## How it works
 
-`detector.py` is a **policy-free sensor**: it opens the camera, runs dlib's HOG face detector and
-68-point landmark predictor, and streams one JSON line per frame to stdout — a face's lip gap and
+`detector.py` is a **policy-free sensor**: it opens the camera, runs MediaPipe's BlazeFace
+detector and 468-point Face Mesh model through OpenVINO, and streams one JSON line per frame to
+stdout — a face's lip gap and
 face height, or a bare no-face measurement. It has no concept of a threshold, a detection window,
 or an alert; it only measures and reports.
 
@@ -197,13 +231,13 @@ This split exists so that **settings changes apply live, without restarting the 
 Because thresholds, the detection window, distance compensation, and alert sound/volume/
 notification behaviour are all read reactively from `pluginData` inside the QML daemon, changing
 any of them from the settings panel takes effect on the very next measurement line — no detector
-process restart, and no re-paying the ~1 s dlib model load or the camera's warm-up period (see
+process restart, and no re-paying the model compile or the camera's warm-up period (see
 [Limitations](#limitations)).
 
 The daemon also drives `detector.py` with two stdin commands, `pause` and `resume`, used for
 auto-pause (screen lock, idle, suspend): `pause` releases the camera device (so the camera's LED
-goes off) while keeping the dlib model resident in memory, and `resume` reopens the device. This
-avoids paying the model-load cost on every lock/unlock cycle.
+goes off) while keeping the compiled models resident, and `resume` reopens the device. This avoids
+recompiling for the inference device on every lock/unlock cycle.
 
 ## Statistics and detection semantics
 
@@ -224,19 +258,9 @@ These are easy to misread, so stated explicitly:
 
 ## Limitations
 
-These were each found the hard way during development (see `CALIBRATION.md` for the full detail
-behind the calibration- and camera-related ones) and are worth knowing before you rely on this
-plugin:
+These were each found the hard way during development, and are worth knowing before you rely on
+this plugin:
 
-- **dlib's HOG face detector has a minimum detectable face size, roughly 80×80 px.** At the
-  default 640×480 capture resolution, detection is reliable at normal seated distance from the
-  camera, but degrades as you move farther back, and at arm's length it may not find a face at
-  all. `detector.py --width` / `--height` lower this floor's real-world distance further — the
-  detector runs at full capture resolution with no downscale, so shrinking the capture size
-  shrinks the usable seating-distance range too.
-- **Off-angle robustness is worse than the original browser version's MediaPipe.** A turned head
-  reads as "no face" rather than firing a false alert, which is the safer failure mode, but it is
-  a genuine accuracy regression compared to the web app this was ported from.
 - **Camera warm-up costs roughly the first 7 seconds of every session.** A cold-started UVC
   camera takes about that long to auto-expose before it produces a usable measurement. This
   applies at the start of every session, and again after every auto-pause resume (lock/idle/sleep)
@@ -247,12 +271,12 @@ plugin:
   camera directly via V4L2 (`cv2.VideoCapture(..., cv2.CAP_V4L2)`), which PipeWire doesn't see.
   **The plugin's own bar pill is the honest signal of whether your camera is in use** — do not
   rely on DMS's shell-wide privacy indicator to tell you MouthGuard's camera is off.
-- **The landmark model is large** — roughly 95 MB (99.7 MB decimal) on disk — and is not bundled
-  in this repository; see [The landmark model](#the-landmark-model) above.
-- **Thresholds are calibrated for one person, one camera, and one lighting setup** (Logitech UVC
-  046d:0990, recorded 2026-08-02 — see `CALIBRATION.md`). They will not necessarily transfer to a
-  different camera or face. Re-tune with `tools/calibrate.py` and the procedure documented in
-  `CALIBRATION.md` if detection feels wrong on your setup.
+- **Only one face is tracked** — the highest-scoring detection wins, and MediaPipe's tracking
+  then follows that face until it is lost. A second person entering frame does not confuse the
+  measurement, but neither are they measured.
+- **The NPU needs a graph compiler that no distribution packages.** The flake fetches Intel's,
+  pinned to the driver release it matches; outside Nix you are on the GPU or the CPU unless you
+  install it yourself. See [Using the NPU](#using-the-npu).
 
 ## Testing
 
@@ -265,7 +289,7 @@ nix develop -c qmltestrunner -input tests/tst_statemachine.qml
 nix develop -c qmltestrunner -input tests/tst_gapchart_math.qml
 ```
 
-Expected: `pytest` reports `33 passed`; each `qmltestrunner` run reports `28 passed` and
+Expected: `pytest` reports `43 passed`; each `qmltestrunner` run reports `28 passed` and
 `10 passed` respectively, both with `Totals: N passed, 0 failed, ...` and process exit code `0`.
 
 **Note on `qmltestrunner`'s exit code:** it is the **failure count**, not a flat `1` on any

@@ -14,17 +14,20 @@ QtObject {
     //
     //   1. <pluginDir>/result/bin/mouthguard-detector -- the flake-built
     //      wrapper (`nix build .#detector` inside the plugin directory).
-    //      Self-contained: bundles the pinned interpreter, cv2 and dlib, so
-    //      it needs nothing from the ambient environment.
+    //      Self-contained: bundles the pinned interpreter, cv2, OpenVINO and
+    //      the MediaPipe model files, so it needs nothing from the ambient
+    //      environment.
     //   2. python3 <pluginDir>/detector.py -- portable fallback, for distros
-    //      where cv2 and dlib are installed system-wide for python3.
+    //      where cv2 and openvino are installed system-wide for python3 and
+    //      the models are on disk somewhere resolve_model_dir looks.
     //
-    // This copy additionally gates the python3 branch on an explicit
-    // `import cv2, dlib`, which the daemon's copy does not do. Reason:
-    // detector.py's --self-test returns BEFORE its `import cv2, dlib` line
-    // (see detector.py's self_test()/main(), which this file must not
-    // modify), so self-test alone passes on that branch even when cv2/dlib
-    // are missing -- verified directly: `python3 detector.py --self-test`
+    // This copy additionally gates the python3 branch on an explicit import
+    // and model-resolution probe, which the daemon's copy does not do.
+    // Reason: detector.py's --self-test returns BEFORE its imports and
+    // before it resolves a model directory (see detector.py's
+    // self_test()/main(), which this file must not modify), so self-test
+    // alone passes on that branch even when those are
+    // missing -- verified directly: `python3 detector.py --self-test`
     // exits 0 printing a valid "ready" line on this machine's ambient
     // python3, which has neither module installed. That false pass matters
     // here specifically because `[ -x "$W" ]` is false for a dangling/stale
@@ -34,8 +37,8 @@ QtObject {
     // here, that would silently rubber-stamp exactly the broken-wrapper
     // case this task exists to catch, instead of failing it. The wrapper
     // branch needs no equivalent gate: `nix build .#detector` guarantees
-    // cv2/dlib inside its own closure whenever the resulting binary is
-    // actually executable.
+    // both modules and both model files inside its own closure whenever the
+    // resulting binary is actually executable.
     //
     // `dir` is trusted (it comes from this component's own file location,
     // see _pluginDir below), so no extra quoting/escaping is done beyond the
@@ -45,7 +48,12 @@ QtObject {
         const detector = dir + "/detector.py"
         return 'W="' + wrapper + '"; ' +
                'if [ -x "$W" ]; then exec "$W" --self-test; fi; ' +
-               'python3 -c "import cv2, dlib" || exit 1; ' +
+               'python3 -c "import cv2, openvino" || exit 1; ' +
+               // Models are a separate dependency from the modules that read
+               // them, and a missing one fails at the first frame rather
+               // than at import, so it is probed explicitly here.
+               'python3 -c "import sys; sys.path.insert(0, \'' + dir + '\'); ' +
+               'import mouthguard_core; mouthguard_core.resolve_model_dir()" || exit 1; ' +
                'exec python3 "' + detector + '" --self-test'
     }
 
@@ -86,7 +94,7 @@ QtObject {
         // garbage-collected) fails `[ -x "$W" ]` exactly like a wrapper that
         // was never built, so both fall through to the python3 branch below
         // -- see _checkScript's comment for why that branch carries its own
-        // explicit cv2/dlib import check. `exec 2>&1` merges stderr into the
+        // explicit module and model probes. `exec 2>&1` merges stderr into the
         // captured stream purely for this one-shot probe, so a failure
         // (missing module, broken exec) is visible in the details pane --
         // this is NOT done in MouthGuardDaemon.qml's copy of the script,
@@ -103,16 +111,19 @@ QtObject {
                     "title": I18n.tr("MouthGuard detector is not available"),
                     "details": I18n.tr(
                         "MouthGuard needs a working detector: either the flake-built "
-                        + "wrapper, or python3 with the cv2 and dlib modules.\n\n"
+                        + "wrapper, or python3 with the cv2 and openvino modules "
+                        + "plus the two MediaPipe model files.\n\n"
                         + "Nix (required on NixOS -- the system python3 will not have "
-                        + "these modules):\n"
+                        + "these modules, and the flake is also what enables the NPU):\n"
                         + "  cd " + dir + " && nix build .#detector\n"
                         + "(already did this? the build may be stale, e.g. its nix "
                         + "store path was garbage-collected -- rebuild it)\n\n"
-                        + "Other distros, if cv2/dlib are installed system-wide:\n"
-                        + "  Arch:    sudo pacman -S python-opencv python-dlib\n"
-                        + "  Fedora:  sudo dnf install python3-opencv python3-dlib\n"
-                        + "  Debian:  sudo apt install python3-opencv python3-dlib\n\n"
+                        + "Other distros, if cv2/openvino are installed system-wide:\n"
+                        + "  Arch:    sudo pacman -S python-opencv python-openvino\n"
+                        + "  Fedora:  sudo dnf install python3-opencv python3-openvino\n"
+                        + "  Debian:  sudo apt install python3-opencv python3-openvino\n\n"
+                        + "The models go in ~/.cache/mouthguard, or anywhere pointed "
+                        + "at by MOUTHGUARD_MODEL_DIR -- see the README.\n\n"
                         + "Detail: ") + stdout
                 })
             })

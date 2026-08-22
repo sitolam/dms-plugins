@@ -2,7 +2,7 @@
     "id": "mouthGuard",
     "name": "MouthGuard",
     "description": "Webcam mouth-closure tracker with alerts and session stats",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "license": "MIT",
     "author": "sitolam",
     "icon": "sentiment_satisfied",
@@ -15,6 +15,6 @@
     "settings": "./MouthGuardSettings.qml",
     "startupCheck": "./StartupCheck.qml",
     "requires_dms": ">=1.5.0",
-    "dependencies": ["python3", "python-opencv", "python-dlib"],
+    "dependencies": ["python3", "python-opencv", "python-openvino"],
     "permissions": ["settings_read", "settings_write", "process"]
 }

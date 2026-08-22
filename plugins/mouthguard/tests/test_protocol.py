@@ -4,8 +4,8 @@ from mouthguard_core import encode_ready, encode_measurement, encode_error
 
 
 def test_ready_handshake_carries_backend_and_device():
-    d = json.loads(encode_ready("dlib", "/dev/video0", 10))
-    assert d == {"ready": True, "backend": "dlib", "device": "/dev/video0", "fps": 10}
+    d = json.loads(encode_ready("mediapipe/NPU", "/dev/video0", 10))
+    assert d == {"ready": True, "backend": "mediapipe/NPU", "device": "/dev/video0", "fps": 10}
 
 
 def test_measurement_includes_gap_and_face():
@@ -36,7 +36,7 @@ def test_degenerate_float_raises_instead_of_emitting_invalid_json():
 
 def test_lines_are_single_line_and_newline_free():
     for line in [
-        encode_ready("dlib", "/dev/video0", 10),
+        encode_ready("mediapipe/NPU", "/dev/video0", 10),
         encode_measurement(1.0, 2.0, 3.0),
         encode_error("x", "y\nz"),
     ]:

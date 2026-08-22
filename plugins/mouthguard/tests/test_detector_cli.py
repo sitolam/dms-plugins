@@ -21,7 +21,7 @@ def test_first_line_is_the_ready_handshake():
     lines = run_self_test().stdout.strip().splitlines()
     first = json.loads(lines[0])
     assert first["ready"] is True
-    assert first["backend"] == "dlib"
+    assert first["backend"] == "mediapipe"
 
 
 def test_every_line_is_valid_standalone_json():
