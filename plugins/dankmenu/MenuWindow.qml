@@ -295,7 +295,9 @@ PanelWindow {
 
                     StyledText {
                         width: parent.width
-                        visible: root.breadcrumb.length > 0
+                        // One level deep the breadcrumb would just repeat
+                        // the title underneath it.
+                        visible: root.breadcrumb.length > 1
                         height: visible ? implicitHeight : 0
                         text: root.breadcrumb.join("  ›  ")
                         color: Theme.surfaceVariantText

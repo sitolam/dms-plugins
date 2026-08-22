@@ -1,24 +1,86 @@
 # dankMenu
 
-An [Omarchy](https://github.com/basecamp/omarchy)-style root menu for
-[DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell): one key
-to every command on the machine, with drill-in navigation and its own search.
+One key to every command on the machine — a hierarchical, searchable root menu
+for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell), in
+the shape of [Omarchy](https://github.com/basecamp/omarchy)'s `Super+Space`
+menu.
 
-## What it is
+![dankMenu root](screenshots/root.png)
 
-Omarchy binds `SUPER+SPACE` to a hierarchical, fuzzy-searchable menu covering
-apps, settings, toggles and power actions. This is that menu, as a DMS plugin.
+Type instead of navigating, and it searches every command below the level
+you're on — with a breadcrumb telling you where each result lives:
 
-It is a `daemon` plugin owning its own layershell window rather than a launcher
-plugin living inside DMS's spotlight. That is not a stylistic choice: the
-spotlight modal hides itself on every item execution
-(`SpotlightLauncherContent.qml` reacts to `Controller`'s `itemExecuted`) with no
-hook for a plugin to prevent it, which makes drill-in navigation impossible
-there.
+![searching from the root](screenshots/search.png)
 
-The search, the ranking and the app list are the plugin's own code. The only
-thing borrowed from the shell is `SessionService.launchDesktopEntry`, so that
-apps started from the menu land in the right systemd scope.
+## Credits
+
+The design is [Omarchy](https://github.com/basecamp/omarchy)'s, by
+[Basecamp](https://basecamp.com) and its contributors (MIT). Omarchy binds
+`SUPER+SPACE` to `omarchy-menu`, a hierarchical menu covering apps, settings,
+toggles and power actions — the single entry point to the whole desktop.
+
+This plugin reimplements that idea for DMS. It shares no code with Omarchy, but
+it deliberately keeps **their menu file schema field-for-field**, so subtrees of
+[`omarchy-menu.jsonc`](https://github.com/basecamp/omarchy/blob/master/default/omarchy/omarchy-menu.jsonc)
+paste in and parse unchanged, and their `when` / `checked` / `disabled`
+semantics behave the same way. The IPC verbs mirror `omarchy-menu`'s too, so
+routes and muscle memory carry over.
+
+Go try the real thing if you're on Arch — it's very good.
+
+## Why a window instead of a spotlight plugin
+
+DMS already supports `type: launcher` plugins that add rows to its spotlight, so
+that looks like the obvious way to build this. It cannot work: DMS's launcher
+controller emits `itemExecuted` after every selection and the spotlight modal
+hides itself on that signal unconditionally, with no hook for a plugin to
+prevent it. "Enter descends into a submenu" is therefore impossible there —
+selecting a row always closes the launcher.
+
+So dankMenu is a `daemon` plugin owning its own wlr-layershell window, and its
+search, ranking and app list are its own code. The only thing borrowed from the
+shell is `SessionService.launchDesktopEntry`, so apps started from the menu land
+in the right systemd scope rather than being reparented to the shell process.
+
+## Install
+
+Requires DMS ≥ 1.5.0.
+
+**Manually:**
+
+```bash
+git clone https://github.com/sitolam/dms-plugins
+ln -s "$PWD/dms-plugins/plugins/dankmenu" ~/.config/DankMaterialShell/plugins/dankMenu
+```
+
+Then enable it in DMS: `Mod+,` → Plugins → enable **Dank Menu**.
+
+**On NixOS, via home-manager:**
+
+```nix
+programs.dank-material-shell.plugins.dankMenu = {
+  enable = true;
+  src = inputs.dms-plugins.packages.${pkgs.system}.dankmenu;
+};
+```
+
+Note that with `managePluginSettings = true`, `plugin_settings.json` becomes a
+read-only store symlink — the plugin must be enabled declaratively as above,
+because the DMS settings GUI cannot write to it.
+
+Finally, bind it. For niri:
+
+```kdl
+binds {
+    Mod+Space { spawn "dms" "ipc" "call" "dankMenu" "toggle" "root"; }
+}
+```
+
+For Hyprland:
+
+```conf
+bind = SUPER, SPACE, exec, dms ipc call dankMenu toggle root
+```
 
 ## Usage
 
@@ -30,13 +92,8 @@ dms ipc call dankMenu close
 dms ipc call dankMenu refresh         # re-read the menu file
 ```
 
-Bind the first one to `Super+Space` in your compositor. For niri:
-
-```kdl
-binds {
-    Mod+Space { spawn "dms" "ipc" "call" "dankMenu" "toggle" "root"; }
-}
-```
+Because `open` takes a route, any submenu can have its own keybind — a power
+menu on `Mod+Escape` is just `dms ipc call dankMenu open system`.
 
 | key | effect |
 | --- | --- |
@@ -49,9 +106,9 @@ binds {
 
 ### vim bindings
 
-Every one is `Ctrl`-prefixed. Bare `hjkl` cannot navigate here: the search
-field is always focused and always accepting a query, so plain letters have to
-reach it as text.
+Every one is `Ctrl`-prefixed. Bare `hjkl` cannot navigate here: the search field
+is always focused and always accepting a query, so plain letters have to reach
+it as text.
 
 | key | effect |
 | --- | --- |
@@ -60,44 +117,123 @@ reach it as text.
 | `Ctrl+D` / `Ctrl+U` | half a page down / up |
 | `Ctrl+G` | close the menu outright, from any depth |
 
-At the root, a search also covers installed applications, so one keystroke
-sequence finds either a command or a program.
-
 Going back out of a submenu returns the highlight to the row you entered
 through, not to the top of the list.
 
-## The menu file
+## Configuring the menu
 
-`menu.jsonc` uses Omarchy's schema exactly — object keys are dotted ids,
-hierarchy is implied by the dots, and the kind of a row is inferred from its
-fields (`action` → action, `target` → link, `provider` → provider, otherwise
-submenu). Subtrees of Omarchy's own menu file can be pasted in unchanged.
+The whole menu is one JSONC file. The plugin ships
+[`menu.jsonc`](menu.jsonc) as a starting point; point the **`menuPath`** setting
+at your own file to replace it entirely. Whichever file is live is watched, so
+saving it updates the menu immediately — no shell restart, no `refresh` call.
+
+Set `menuPath` in DMS under `Mod+,` → Plugins → Dank Menu, or declaratively:
+
+```nix
+programs.dank-material-shell.plugins.dankMenu.settings.menuPath = "/home/you/.config/dankmenu.jsonc";
+```
+
+### The file format
+
+JSONC — JSON with `//` comments and trailing commas, the same dialect Omarchy
+uses. Object keys are **dotted ids**, and the dots *are* the hierarchy:
+`setup.network.dns` is a child of `setup.network`, which is a child of `setup`.
+Declaration order is display order.
 
 ```jsonc
 {
+  // A submenu: no action, no target, no provider.
   "system": {"icon":"power_settings_new","label":"System","aliases":["power-menu"]},
+
+  // An action: runs a shell command, then closes the menu.
   "system.lock": {"icon":"lock","label":"Lock","action":"loginctl lock-session"},
-  "trigger.toggle.night": {
-    "icon":"nightlight","label":"Night Mode",
-    "checked":"dms ipc call night status | grep -q enabled",
-    "action":"dms ipc call night toggle"
-  }
+
+  // A link: opens in your browser.
+  "learn.niri": {"icon":"grid_view","label":"Niri","target":"https://github.com/YaLTeR/niri/wiki"},
+
+  // A provider: contents generated at open time. "apps" is the only one so far.
+  "apps": {"icon":"apps","label":"Apps","provider":"apps"},
 }
 ```
 
-Rows may carry `when`, `checked` and `disabled` shell snippets: `when` hides the
-row unless the snippet succeeds, `checked` appends a tick when it does, and
-`disabled` dims the row and blocks selection. Every snippet for one level runs
-in a **single** shell, not one process per row, and rows stay visible while the
-results are still pending.
+The **kind of a row is inferred**, never declared: `action` makes it an action,
+`target` a link, `provider` a provider-backed submenu, and anything else a plain
+submenu.
 
-`action` runs through `bash -lc`, so pipes, `$(…)` and `&&` all work. Icons on
-ordinary rows are [Material Symbols](https://fonts.google.com/icons) names; app
-rows use the icon theme.
+### Fields
 
-Point the `menuPath` setting at another file to replace the tree entirely —
-that is how a Nix-managed install supplies a generated one. Whichever file is
-live is watched, so edits apply without restarting the shell.
+| field | meaning |
+| --- | --- |
+| `label` | the row's text. Defaults to its id. |
+| `icon` | a [Material Symbols](https://fonts.google.com/icons) name (`wifi`, `school`). App rows use the icon theme instead. |
+| `iconFont` | font family for the glyph, when it isn't the menu font |
+| `title` | header text when the submenu is open. Defaults to `label`. |
+| `aliases` | extra names for `open <route>`, and extra search terms |
+| `action` | shell command, run through `bash -lc` |
+| `target` | URL, opened externally |
+| `provider` | generated contents — currently only `apps` |
+| `when` | hide the row unless this succeeds |
+| `checked` | append a ✓ when this succeeds |
+| `disabled` | dim the row and block selection when this succeeds |
+
+Actions go through `bash -lc`, so pipes, `$(…)`, `&&` and quoting all work —
+menu actions are shell text, not argv.
+
+### Conditions
+
+`when`, `checked` and `disabled` are shell snippets, judged by **exit status**.
+They make the menu reflect the machine rather than just describe it:
+
+```jsonc
+// Ticked while night mode is actually on.
+"trigger.toggle.night": {
+  "icon":"nightlight","label":"Night Mode",
+  "checked":"dms ipc call night status | grep -q enabled",
+  "action":"dms ipc call night toggle"
+},
+
+// Absent entirely on a desktop.
+"trigger.toggle.battery": {
+  "icon":"battery_std","label":"Battery Percentage",
+  "when":"test -d /sys/class/power_supply/BAT0",
+  "action":"dms ipc call bar toggle"
+},
+```
+
+![conditions in action](screenshots/conditions.png)
+
+Every snippet for one menu level runs in a **single** shell, not one process per
+row, so a level with a dozen conditions costs one spawn. Rows stay visible while
+results are pending, so a slow condition delays a tick rather than making rows
+flicker in and out of the list.
+
+Conditions are re-evaluated every time you enter a level, so a tick is never
+stale. While a search is active they cover the whole subtree being searched.
+
+### Apps
+
+The `apps` provider lists your desktop entries, ranked by the plugin's own
+fuzzy scorer plus a frecency boost. At the **root**, a search covers apps too —
+so one keystroke sequence finds either a command or a program.
+
+![the apps provider](screenshots/apps.png)
+
+### Generating the tree
+
+Because `menuPath` is just a path, the file can be generated. On NixOS that
+means menu rows can reference store paths and your own flake:
+
+```nix
+{ id = "update.rebuild"; icon = "build"; label = "Rebuild";
+  action = "ghostty --working-directory=${flakeDir} -e just rebuild"; }
+```
+
+Emit it as ordered JSONC text rather than via `pkgs.formats.json` — Nix
+serialises attrsets alphabetically, and menu rows have a meaningful order. A
+power menu reading "lock, logout, reboot, shutdown, suspend" is not the one
+anybody wants. See
+[sitolamix's `plugins.nix`](https://github.com/sitolam/sitolamix/blob/main/modules/desktop/dms/plugins.nix)
+for a full worked example.
 
 ## Development
 
@@ -109,5 +245,22 @@ qmltestrunner -input tests/tst_conditions.qml
 ```
 
 `qmltestrunner` takes one `-input` per run and exits with the failure count.
-`MenuModel.js`, `Search.js` and `Conditions.js` import no QML types, so the
-tests exercise the exact files the plugin loads rather than copies of them.
+`nix flake check` runs all three headless.
+
+`MenuModel.js` (JSONC parsing, tree building, route resolution), `Search.js`
+(scoring and ranking) and `Conditions.js` (script generation and output
+parsing) import no QML types at all, so the tests exercise the exact files the
+plugin loads rather than copies of them. The QML files are thin shells over
+those three.
+
+| file | responsibility |
+| --- | --- |
+| `DankMenuDaemon.qml` | IPC handler, menu file loading, window lifecycle |
+| `MenuWindow.qml` | the layershell window, keys, row building |
+| `MenuList.qml` | list and row delegate |
+| `Conditions.qml` | runs the generated condition script |
+| `AppSource.qml` | desktop entries in, menu rows out |
+
+## License
+
+MIT.
