@@ -7,133 +7,48 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAll = f: nixpkgs.lib.genAttrs systems (s: f nixpkgs.legacyPackages.${s});
+      # Every derivation lives in ./package.nix, so this flake and the
+      # repository-root one build the identical detector -- see that file for
+      # why they are not each defined here.
+      mouthguard = pkgs: import ./package.nix { inherit pkgs; };
     in
     {
-      packages = forAll (pkgs: rec {
-        # The two MediaPipe TFLite bundles the web app's @mediapipe/face_mesh
-        # 0.4 loads, fetched from Google's asset bucket and pinned by hash so
-        # the plugin measures against exactly the model it was tuned on.
-        # OpenVINO's TFLite frontend reads them as-is; there is no conversion
-        # step to keep in sync.
-        models = pkgs.runCommand "mouthguard-models" { } ''
-          mkdir -p $out
-          cp ${pkgs.fetchurl {
-            url = "https://storage.googleapis.com/mediapipe-assets/face_detection_short_range.tflite";
-            hash = "sha256-O8GC658zkl2eWLXI1ZMIp2D0reqPKCNw5CjFEhLCZjM=";
-          }} $out/face_detection_short_range.tflite
-          cp ${pkgs.fetchurl {
-            url = "https://storage.googleapis.com/mediapipe-assets/face_landmark.tflite";
-            hash = "sha256-EFXLnUqcqLjGiJAqOlGUMRE4uiVrzJTjNtg3Ol8wyBQ=";
-          }} $out/face_landmark.tflite
-        '';
+      packages = forAll (pkgs:
+        let mg = mouthguard pkgs;
+        in removeAttrs mg [ "devPackages" ] // { default = mg.detector; });
 
-        pythonEnv = pkgs.python3.withPackages (ps: with ps; [
-          openvino opencv4 numpy
-        ]);
+      devShells = forAll (pkgs:
+        let mg = mouthguard pkgs; in {
+          default = pkgs.mkShell {
+            packages = mg.devPackages;
 
-        # --- NPU support ---------------------------------------------------
-        # OpenVINO can only build a graph for Intel's NPU through a compiler
-        # that Intel ships as a binary alongside the Level Zero driver, and
-        # that nixpkgs does not package: without it the NPU enumerates and
-        # then fails every compile with ZE_RESULT_ERROR_UNSUPPORTED_FEATURE.
-        # It is fetched from the same driver release the kernel side comes
-        # from, because the compiler and driver version must match.
-        npuCompiler = pkgs.stdenvNoCC.mkDerivation {
-          pname = "intel-npu-driver-compiler";
-          version = "1.35.0";
-          src = pkgs.fetchurl {
-            url = "https://github.com/intel/linux-npu-driver/releases/download/v1.35.0/linux-npu-driver-v1.35.0.20260722-29947505341-ubuntu2404.tar.gz";
-            hash = "sha256-OYND5T/axgI60IVu+Iu2ARseEkR6ESvlXoXifvf5bGY=";
-          };
-          sourceRoot = ".";
-          nativeBuildInputs = with pkgs; [ dpkg autoPatchelfHook ];
-          buildInputs = with pkgs; [ stdenv.cc.cc.lib tbb_2022 zlib zstd ];
-          installPhase = ''
-            runHook preInstall
-            dpkg-deb -x intel-driver-compiler-npu_*.deb unpacked
-            install -Dm444 -t $out/lib unpacked/usr/lib/x86_64-linux-gnu/*.so
-            runHook postInstall
-          '';
-          meta.platforms = [ "x86_64-linux" ];
-        };
-
-        # OpenVINO looks for that compiler next to its own plugin libraries,
-        # by the path libopenvino.so itself was loaded from -- so the copy
-        # has to be a real one, not a tree of symlinks back into the
-        # openvino store path, and the detector has to load libopenvino.so
-        # from here (LD_LIBRARY_PATH, which the loader consults before the
-        # RUNPATH baked into the Python module). Registering the NPU plugin
-        # from a private directory does not work: the compiler path is
-        # derived from libopenvino.so's location, not the plugin's.
-        openvinoWithNpu = pkgs.runCommand "openvino-with-npu-compiler" { } ''
-          mkdir -p $out/lib
-          cp -rL ${pkgs.openvino.lib}/lib/. $out/lib/
-          chmod -R u+w $out/lib
-          cp ${npuCompiler}/lib/*.so $out/lib/openvino/
-        '';
-        detectorSrc = pkgs.runCommand "mouthguard-detector-src" { } ''
-          mkdir -p $out
-          cp ${./detector.py} $out/detector.py
-          cp ${./mouthguard_core.py} $out/mouthguard_core.py
-          cp ${./mouthguard_mesh.py} $out/mouthguard_mesh.py
-        '';
-        detector = pkgs.writeShellScriptBin "mouthguard-detector" ''
-          export MOUTHGUARD_MODEL_DIR=''${MOUTHGUARD_MODEL_DIR:-${models}}
-          ${nixpkgs.lib.optionalString pkgs.stdenv.hostPlatform.isx86_64 ''
-            # Everything below is what it takes to reach the NPU; all of it is
-            # harmless on a machine that has none, where mouthguard_mesh falls
-            # through to GPU and then CPU.
+            # qmltestrunner's bundled QtTest/TestCase.qml imports
+            # QtQuick.Window, which lives in qtdeclarative's own qml tree. That
+            # tree isn't on the import path by default in this shell (and an
+            # ambient system Qt install can shadow it), so qmltestrunner fails
+            # to resolve TestCase itself. Point both the Qt6 and legacy
+            # Qt5-named variables at it, derived from the qtdeclarative package
+            # already in this shell's inputs so it tracks nixpkgs bumps instead
+            # of a pinned store path. QML_IMPORT_PATH is prepended-to rather
+            # than overwritten because it is a real, still-consulted Qt6
+            # variable: something outside this shell (another tool, an editor, a
+            # parent shell) may legitimately already have paths on it that we
+            # want to keep. QML2_IMPORT_PATH is just Qt6's back-compat alias for
+            # it — nothing should be setting QML2_IMPORT_PATH on its own
+            # account, so it is simply assigned the final, already-merged
+            # QML_IMPORT_PATH value rather than merged separately (merging it
+            # independently would risk the two variables disagreeing, which
+            # defeats the point of one being an alias).
             #
-            #   openvinoWithNpu  the OpenVINO libraries plus Intel's NPU graph
-            #                    compiler, which has to sit beside them
-            #   level-zero       the loader the NPU plugin talks to; OpenVINO
-            #                    enumerates no NPU at all without it on the path
-            #   /run/opengl-driver/lib  where NixOS puts the Level Zero and
-            #                    OpenCL userspace drivers (hardware.graphics
-            #                    .extraPackages), needed for both NPU and GPU
-            export LD_LIBRARY_PATH="${openvinoWithNpu}/lib:${pkgs.level-zero}/lib:/run/opengl-driver/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-            # Fallback for systems that did not install the NPU driver into
-            # the system driver path: the Level Zero loader will also take a
-            # driver named outright, and ignores one matching no hardware.
-            export ZE_ENABLE_ALT_DRIVERS=''${ZE_ENABLE_ALT_DRIVERS:-${pkgs.intel-npu-driver}/lib/libze_intel_npu.so.1}
-          ''}
-          exec ${pythonEnv}/bin/python3 ${detectorSrc}/detector.py "$@"
-        '';
-        default = detector;
-      });
-
-      devShells = forAll (pkgs: {
-        default = pkgs.mkShell {
-          packages = [
-            (pkgs.python3.withPackages (ps: with ps; [
-              openvino opencv4 numpy pytest
-            ]))
-            pkgs.qt6.qtdeclarative
-            pkgs.jq
-          ];
-
-          # qmltestrunner's bundled QtTest/TestCase.qml imports QtQuick.Window,
-          # which lives in qtdeclarative's own qml tree. That tree isn't on the
-          # import path by default in this shell (and an ambient system Qt
-          # install can shadow it), so qmltestrunner fails to resolve TestCase
-          # itself. Point both the Qt6 and legacy Qt5-named variables at it,
-          # derived from the qtdeclarative package already in this shell's
-          # inputs so it tracks nixpkgs bumps instead of a pinned store path.
-          # QML_IMPORT_PATH is prepended-to rather than overwritten because it
-          # is a real, still-consulted Qt6 variable: something outside this
-          # shell (another tool, an editor, a parent shell) may legitimately
-          # already have paths on it that we want to keep. QML2_IMPORT_PATH is
-          # just Qt6's back-compat alias for it — nothing should be setting
-          # QML2_IMPORT_PATH on its own account, so it is simply assigned the
-          # final, already-merged QML_IMPORT_PATH value rather than merged
-          # separately (merging it independently would risk the two variables
-          # disagreeing, which defeats the point of one being an alias).
-          shellHook = ''
-            export MOUTHGUARD_MODEL_DIR="''${MOUTHGUARD_MODEL_DIR:-${self.packages.${pkgs.stdenv.hostPlatform.system}.models}}"
-            export QML_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
-            export QML2_IMPORT_PATH="$QML_IMPORT_PATH"
-          '';
-        };
-      });
+            # MOUTHGUARD_MODEL_DIR is set for the same reason the detector
+            # wrapper sets it: `python3 detector.py` run out of the working tree
+            # has no other way to find the models.
+            shellHook = ''
+              export MOUTHGUARD_MODEL_DIR="''${MOUTHGUARD_MODEL_DIR:-${mg.models}}"
+              export QML_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml''${QML_IMPORT_PATH:+:$QML_IMPORT_PATH}"
+              export QML2_IMPORT_PATH="$QML_IMPORT_PATH"
+            '';
+          };
+        });
     };
 }
