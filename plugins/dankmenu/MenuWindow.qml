@@ -318,6 +318,19 @@ PanelWindow {
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
 
+                        // Sibling of the field rather than a child of it: a
+                        // TextInput paints its own text layer over its children,
+                        // so a placeholder nested inside it never shows.
+                        StyledText {
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.verticalCenter: parent.verticalCenter
+                            visible: searchInput.text === ""
+                            text: root.currentId ? "Search " + root.headerTitle : "Search"
+                            color: Theme.surfaceVariantText
+                            font.pixelSize: Theme.fontSizeMedium
+                        }
+
                         TextInput {
                             id: searchInput
 
