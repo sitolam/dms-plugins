@@ -4,6 +4,14 @@ All notable changes to the MouthGuard DMS plugin are documented here.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-08-23
+
+The detection pipeline is now the one the browser app this was ported from actually uses. The
+0.1.0 port swapped MediaPipe for dlib because dlib was the thing packaged for Python on a
+desktop, and paid for it twice: a face had to be close enough to clear dlib's minimum detectable
+size, and a turned head read as no face at all. Both are gone, and so is the calibration step
+that existed largely to work around the first one.
+
 ### Changed
 
 - Face tracking moved from dlib to MediaPipe Face Mesh — the same models the web app this plugin
@@ -48,6 +56,21 @@ All notable changes to the MouthGuard DMS plugin are documented here.
   managing their dotfiles declaratively (home-manager, chezmoi, a `/nix/store` symlink), where
   DMS's own `FileView` suppresses the resulting error. It is now stored as plugin *state*
   alongside session history, in a file DMS creates and owns.
+
+### Packaging and dependencies
+
+- Dependencies are now `python3`, `python-opencv`, and `python-openvino`. `python-dlib` and the
+  95 MB `shape_predictor_68_face_landmarks.dat` are gone; the two MediaPipe models replacing them
+  total 1.4 MB and are fetched, hash-pinned, by the flake.
+- Every derivation moved to `package.nix`, a plain function of a nixpkgs instance, imported by
+  both this plugin's flake and the repository-root one. The root flake — the one consumers
+  actually pin — had carried its own parallel copy of the detector's Python environment, which
+  after this change would have meant a dlib environment for a `detector.py` that imports
+  OpenVINO. Nothing about the new detector survives being retyped by hand in a second place: two
+  hash-pinned model files, and an NPU runtime assembled around a compiler nixpkgs does not
+  package. The root flake's dlib overlay pin went with it.
+- `StartupCheck.qml` now verifies `import cv2, openvino` and that a model directory resolves,
+  because `--self-test` deliberately returns before either is touched.
 
 ## [0.1.0] — 2026-08-02
 

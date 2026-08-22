@@ -49,9 +49,12 @@ failure count rather than a flat 1.
 MouthGuard keeps its own `flake.nix` under `plugins/mouthguard/`: its README and
 `StartupCheck.qml` both document `nix build .#detector` *inside* the plugin
 directory as the supported path for non-flake installs, and that has to keep
-working. The root flake is what NixOS consumers use, and it carries a dlib 20.0
-pin — nixpkgs bumped dlib to 20.0.1 without refreshing `python3Packages.dlib`,
-which breaks the build on unstable.
+working. The root flake is what NixOS consumers pin. Both build the same
+detector, from `plugins/mouthguard/package.nix` — a plain function of a nixpkgs
+instance rather than a flake output, so neither flake defines it twice. That
+matters more than it looks: the detector carries two hash-pinned MediaPipe model
+files and an NPU runtime built around Intel's graph compiler, which nixpkgs does
+not package and OpenVINO will only load from beside its own libraries.
 
 ## Publishing a plugin to the DMS registry
 
