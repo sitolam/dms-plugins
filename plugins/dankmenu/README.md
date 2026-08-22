@@ -44,11 +44,27 @@ binds {
 | `Right` | enter a submenu, when the cursor is at the end of the query |
 | `Escape` | up one level; at the root, close |
 | `Left` / `Backspace` | up one level, when the query is empty |
-| `Up` / `Down`, `Ctrl+P` / `Ctrl+N` | move the selection |
+| `Up` / `Down` | move the selection |
 | any text | search this level's whole subtree |
+
+### vim bindings
+
+Every one is `Ctrl`-prefixed. Bare `hjkl` cannot navigate here: the search
+field is always focused and always accepting a query, so plain letters have to
+reach it as text.
+
+| key | effect |
+| --- | --- |
+| `Ctrl+J` / `Ctrl+K` | down / up (`Ctrl+N` / `Ctrl+P` also work) |
+| `Ctrl+L` / `Ctrl+H` | in / out — enter a submenu, or go up a level |
+| `Ctrl+D` / `Ctrl+U` | half a page down / up |
+| `Ctrl+G` | close the menu outright, from any depth |
 
 At the root, a search also covers installed applications, so one keystroke
 sequence finds either a command or a program.
+
+Going back out of a submenu returns the highlight to the row you entered
+through, not to the top of the list.
 
 ## The menu file
 

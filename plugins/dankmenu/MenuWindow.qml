@@ -93,13 +93,26 @@ PanelWindow {
         id: appSource
     }
 
-    function showLevel(id) {
+    // selectId: which row to land on. Popping back out of a submenu passes the
+    // submenu's own id, so you return to the row you went in through rather
+    // than to the top of the list.
+    function showLevel(id, selectId) {
         currentId = id;
         query = "";
         searchInput.text = "";
         list.rows = rowsFor(id, "");
-        list.currentIndex = 0;
+        list.currentIndex = indexOfRow(selectId);
         evaluateConditions();
+    }
+
+    function indexOfRow(id) {
+        if (!id)
+            return 0;
+        for (let i = 0; i < list.rows.length; i++) {
+            if (list.rows[i].id === id)
+                return i;
+        }
+        return 0;
     }
 
     onQueryChanged: {
@@ -120,7 +133,11 @@ PanelWindow {
         id: conditions
 
         onSettled: {
+            // Rebuilding the rows would otherwise drop the highlight back to
+            // the top the moment a condition resolves.
+            const selected = list.rows[list.currentIndex];
             list.rows = root.rowsFor(root.currentId, root.query);
+            list.currentIndex = root.indexOfRow(selected ? selected.id : "");
         }
     }
 
@@ -196,7 +213,8 @@ PanelWindow {
             closeMenu();
             return;
         }
-        showLevel(tree.nodes[currentId] ? tree.nodes[currentId].parent : "");
+        const cameFrom = currentId;
+        showLevel(tree.nodes[currentId] ? tree.nodes[currentId].parent : "", cameFrom);
     }
 
     visible: menuVisible
@@ -321,7 +339,28 @@ PanelWindow {
                             // when there is no text to edit, and Right only when
                             // the cursor has nowhere further to go -- otherwise
                             // they do the editing thing the user expects.
+                            // Navigation lives on the field, not on an ancestor:
+                            // a focused TextInput consumes Left/Right/Backspace
+                            // for editing, so an ancestor Keys handler would
+                            // never see them. Left and Backspace only navigate
+                            // when there is no text to edit, and Right only when
+                            // the cursor has nowhere further to go -- otherwise
+                            // they do the editing thing the user expects.
+                            //
+                            // Every vim binding is Ctrl-prefixed. Bare hjkl
+                            // cannot navigate here: the field is always focused
+                            // and always accepting a query, so plain letters
+                            // have to reach it as text.
                             Keys.onPressed: event => {
+                                const ctrl = (event.modifiers & Qt.ControlModifier) !== 0;
+                                const lastRow = list.rows.length - 1;
+                                const halfPage = Math.max(1, Math.floor(root.maxVisibleRows / 2));
+
+                                function moveBy(delta) {
+                                    list.currentIndex = Math.max(0, Math.min(list.currentIndex + delta, lastRow));
+                                    event.accepted = true;
+                                }
+
                                 switch (event.key) {
                                 case Qt.Key_Escape:
                                     root.pop();
@@ -346,34 +385,52 @@ PanelWindow {
                                     }
                                     break;
                                 case Qt.Key_Down:
-                                    list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
-                                    event.accepted = true;
+                                    moveBy(1);
                                     break;
                                 case Qt.Key_Up:
-                                    list.currentIndex = Math.max(list.currentIndex - 1, 0);
-                                    event.accepted = true;
+                                    moveBy(-1);
                                     break;
+
+                                // vim: Ctrl+J/K move, Ctrl+H/L go out and in,
+                                // Ctrl+D/U jump half a page, Ctrl+G bails out.
+                                // Ctrl+N/P are the readline spelling of J/K.
+                                case Qt.Key_J:
                                 case Qt.Key_N:
-                                    if (event.modifiers & Qt.ControlModifier) {
-                                        list.currentIndex = Math.min(list.currentIndex + 1, list.rows.length - 1);
+                                    if (ctrl)
+                                        moveBy(1);
+                                    break;
+                                case Qt.Key_K:
+                                case Qt.Key_P:
+                                    if (ctrl)
+                                        moveBy(-1);
+                                    break;
+                                case Qt.Key_D:
+                                    if (ctrl)
+                                        moveBy(halfPage);
+                                    break;
+                                case Qt.Key_U:
+                                    if (ctrl)
+                                        moveBy(-halfPage);
+                                    break;
+                                case Qt.Key_H:
+                                    if (ctrl) {
+                                        root.pop();
                                         event.accepted = true;
                                     }
                                     break;
-                                case Qt.Key_P:
-                                    if (event.modifiers & Qt.ControlModifier) {
-                                        list.currentIndex = Math.max(list.currentIndex - 1, 0);
+                                case Qt.Key_L:
+                                    if (ctrl) {
+                                        root.enter(list.rows[list.currentIndex]);
+                                        event.accepted = true;
+                                    }
+                                    break;
+                                case Qt.Key_G:
+                                    if (ctrl) {
+                                        root.closeMenu();
                                         event.accepted = true;
                                     }
                                     break;
                                 }
-                            }
-
-                            StyledText {
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: searchInput.text === ""
-                                text: "Search"
-                                color: Theme.surfaceVariantText
-                                font.pixelSize: Theme.fontSizeMedium
                             }
                         }
                     }
