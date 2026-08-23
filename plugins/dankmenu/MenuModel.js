@@ -129,6 +129,7 @@ function build(obj) {
             when: raw.when || "",
             checked: raw.checked || "",
             disabled: raw.disabled || "",
+            labelCmd: raw.labelCmd || "",
             children: []
         };
         order.push(id);

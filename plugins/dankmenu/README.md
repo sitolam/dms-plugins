@@ -175,6 +175,7 @@ submenu.
 | `when` | hide the row unless this succeeds |
 | `checked` | append a ✓ when this succeeds |
 | `disabled` | dim the row and block selection when this succeeds |
+| `labelCmd` | replace the row's label with this snippet's output |
 
 Actions go through `bash -lc`, so pipes, `$(…)`, `&&` and quoting all work —
 menu actions are shell text, not argv.
@@ -206,6 +207,37 @@ Every snippet for one menu level runs in a **single** shell, not one process per
 row, so a level with a dozen conditions costs one spawn. Rows stay visible while
 results are pending, so a slow condition delays a tick rather than making rows
 flicker in and out of the list.
+
+### Live labels
+
+`labelCmd` is the odd one out: it is judged by its **output**, not its exit
+status. Its first line of stdout becomes the row's label, which is the only way
+to put a live value in front of someone — the menu tree is a static file, so
+`label` alone can never show a number that changes.
+
+```jsonc
+// Reads "Memory  2.1GiB / 4GiB" rather than "Memory".
+"windows.memory": {
+  "icon":"memory",
+  "label":"Memory",
+  "labelCmd":"docker stats --no-stream --format '{{.MemUsage}}' windows | sed 's/^/Memory  /'",
+  "disabled":"true"
+},
+```
+
+Details worth knowing:
+
+- Output is clamped to **one line** and stripped of tabs, because it travels as
+  one field of a tab-separated record.
+- **stderr is discarded.** A warning from the snippet would otherwise be
+  rendered as the label.
+- Empty output falls back to the static `label`, so a snippet that fails leaves
+  a sensible row rather than a blank one. Give every `labelCmd` row a `label`
+  worth falling back to.
+- It is a **snapshot**, taken when the level opens — like the other three
+  conditions. It is not a running meter; reopen the level to refresh.
+- Keep it fast. Every snippet for a level runs in one shell, and the level waits
+  on all of them.
 
 Conditions are re-evaluated every time you enter a level, so a tick is never
 stale. While a search is active they cover the whole subtree being searched.

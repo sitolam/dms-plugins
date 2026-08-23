@@ -1,6 +1,10 @@
 .pragma library
 
-var KINDS = ["when", "checked", "disabled"];
+// `labelCmd` is deliberately last: it is the only kind whose *output* is used
+// rather than its exit status, and collect()'s order is the order the shell
+// script runs in, so a label is computed after the conditions that decide
+// whether its row is shown at all.
+var KINDS = ["when", "checked", "disabled", "labelCmd"];
 
 function collect(nodes) {
     var out = [];
@@ -31,7 +35,15 @@ function buildScript(conds) {
     var lines = [];
     for (var i = 0; i < conds.length; i++) {
         var c = conds[i];
-        lines.push("{ " + c.snippet + " ; } >/dev/null 2>&1; printf '%s\\t%s\\t%s\\n' " + shellQuote(c.id) + " " + shellQuote(c.kind) + " \"$?\"");
+        if (c.kind === "labelCmd") {
+            // The value has to survive as one field of a tab-separated record,
+            // so it is clamped to a single line and stripped of tabs. stderr is
+            // dropped rather than merged: a warning from the snippet would
+            // otherwise end up rendered as the row's label.
+            lines.push("__dm=$({ " + c.snippet + " ; } 2>/dev/null | head -n1 | tr -d '\\t\\r\\n'); printf '%s\\t%s\\t%s\\n' " + shellQuote(c.id) + " " + shellQuote(c.kind) + " \"$__dm\"");
+        } else {
+            lines.push("{ " + c.snippet + " ; } >/dev/null 2>&1; printf '%s\\t%s\\t%s\\n' " + shellQuote(c.id) + " " + shellQuote(c.kind) + " \"$?\"");
+        }
     }
     return lines.join("\n");
 }
@@ -47,7 +59,9 @@ function parseOutput(text) {
         var id = parts[0];
         if (!results[id])
             results[id] = {};
-        results[id][parts[1]] = parseInt(parts[2], 10);
+        // Every kind but labelCmd reports an exit status; labelCmd reports the
+        // text itself, which may legitimately be empty.
+        results[id][parts[1]] = parts[1] === "labelCmd" ? parts[2] : parseInt(parts[2], 10);
     }
 
     return results;
@@ -55,6 +69,10 @@ function parseOutput(text) {
 
 // Omarchy's semantics: `when` hides unless it succeeds, `checked` ticks when
 // it succeeds, `disabled` dims, ticks and blocks selection when it succeeds.
+// `labelCmd` is ours: its stdout replaces the row's label, which is the only
+// way to put a live value (a temperature, a container's memory use) in front of
+// someone -- the menu tree itself is a static file. It is a snapshot taken when
+// the level is opened, exactly like the other three, not a running meter.
 // Until results land, rows stay visible and unadorned -- a row that vanished
 // and reappeared would be worse than one that settles a frame late.
 function applyTo(node, results) {
@@ -85,10 +103,19 @@ function applyTo(node, results) {
             disabled = r.disabled === 0;
     }
 
+    var label = "";
+    if (node.labelCmd) {
+        if (r.labelCmd === undefined)
+            pending = true;
+        else
+            label = r.labelCmd;
+    }
+
     return {
         visible: visible,
         checked: checked,
         disabled: disabled,
+        label: label,
         pending: pending
     };
 }

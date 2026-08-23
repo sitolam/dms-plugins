@@ -51,7 +51,7 @@ PanelWindow {
                     continue;
                 out.push({
                     id: kids[i].id,
-                    label: kids[i].label,
+                    label: state.label || kids[i].label,
                     icon: kids[i].icon,
                     comment: "",
                     kind: MenuModel.kindOf(kids[i]),
@@ -71,7 +71,7 @@ PanelWindow {
             const crumbs = MenuModel.breadcrumb(tree, leaves[i].parent);
             entries.push({
                 id: leaves[i].id,
-                label: leaves[i].label,
+                label: state.label || leaves[i].label,
                 icon: leaves[i].icon,
                 comment: crumbs.join("  \u203a  "),
                 kind: MenuModel.kindOf(leaves[i]),

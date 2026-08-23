@@ -5,12 +5,13 @@ import "../Conditions.js" as Conditions
 TestCase {
     name: "Conditions"
 
-    function node(id, when, checked, disabled) {
+    function node(id, when, checked, disabled, labelCmd) {
         return {
             id: id,
             when: when || "",
             checked: checked || "",
-            disabled: disabled || ""
+            disabled: disabled || "",
+            labelCmd: labelCmd || ""
         };
     }
 
@@ -21,9 +22,9 @@ TestCase {
         compare(out[0].kind, "when");
     }
 
-    function test_collect_returns_all_three_kinds_in_order() {
-        const out = Conditions.collect([node("a", "w", "c", "d")]);
-        compare(out.map(c => c.kind), ["when", "checked", "disabled"]);
+    function test_collect_returns_all_kinds_in_order() {
+        const out = Conditions.collect([node("a", "w", "c", "d", "l")]);
+        compare(out.map(c => c.kind), ["when", "checked", "disabled", "labelCmd"]);
     }
 
     function test_shell_quote_wraps_and_escapes() {
@@ -116,5 +117,63 @@ TestCase {
         const state = Conditions.applyTo(node("a", "cmd"), {});
         compare(state.visible, true);
         compare(state.pending, true);
+    }
+
+    // labelCmd is the one kind whose *output* matters rather than its exit
+    // status, so it gets its own line shape.
+    function test_build_script_label_cmd_captures_stdout() {
+        const script = Conditions.buildScript([
+            {
+                id: "a",
+                kind: "labelCmd",
+                snippet: "echo hi"
+            }
+        ]);
+        verify(script.indexOf("$(") !== -1);
+        verify(script.indexOf("'a'") !== -1);
+        verify(script.indexOf("'labelCmd'") !== -1);
+        // stderr must not reach the label, and the value must stay on one line
+        // or it would break the tab-separated record.
+        verify(script.indexOf("2>/dev/null") !== -1);
+        verify(script.indexOf("head -n1") !== -1);
+    }
+
+    function test_parse_output_keeps_label_cmd_as_text() {
+        const results = Conditions.parseOutput("a\tlabelCmd\tCPU 4%\nb\twhen\t0\n");
+        compare(results["a"].labelCmd, "CPU 4%");
+        compare(results["b"].when, 0);
+    }
+
+    function test_parse_output_allows_empty_label() {
+        const results = Conditions.parseOutput("a\tlabelCmd\t\n");
+        compare(results["a"].labelCmd, "");
+    }
+
+    function test_apply_label_cmd_overrides_label() {
+        const n = node("a", "", "", "", "echo x");
+        const state = Conditions.applyTo(n, {
+            a: {
+                labelCmd: "RAM 2.1G"
+            }
+        });
+        compare(state.label, "RAM 2.1G");
+    }
+
+    function test_apply_label_cmd_empty_output_falls_back() {
+        const n = node("a", "", "", "", "echo x");
+        const state = Conditions.applyTo(n, {
+            a: {
+                labelCmd: ""
+            }
+        });
+        compare(state.label, "");
+        compare(state.pending, false);
+    }
+
+    function test_apply_label_cmd_pending_until_result() {
+        const n = node("a", "", "", "", "echo x");
+        const state = Conditions.applyTo(n, {});
+        compare(state.pending, true);
+        compare(state.label, "");
     }
 }
