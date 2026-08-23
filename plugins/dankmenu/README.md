@@ -26,6 +26,10 @@ paste in and parse unchanged, and their `when` / `checked` / `disabled`
 semantics behave the same way. The IPC verbs mirror `omarchy-menu`'s too, so
 routes and muscle memory carry over.
 
+The schema is a superset, not a copy: [`labelCmd`](#live-labels) is an addition
+of ours. Omarchy menus still paste in unchanged — the extra field is simply
+absent from them — but a menu using `labelCmd` will not work in Omarchy.
+
 Go try the real thing if you're on Arch — it's very good.
 
 ## Why a window instead of a spotlight plugin
