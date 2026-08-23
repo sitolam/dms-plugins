@@ -44,10 +44,24 @@ in the right systemd scope rather than being reparented to the shell process.
 
 ## Install
 
-Requires DMS ≥ 1.5.0.
+Requires DMS ≥ 1.5.0. Nothing else — the plugin is QML and JavaScript, there is
+no build step, and it references no path above its own root.
 
-**Manually — any distro.** The directory name must match `plugin.json`'s `id`,
-`dankMenu`. Symlinking the clone means the plugin updates with a `git pull`:
+**Any distro**, from the [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry):
+
+```bash
+dms plugins install dankMenu
+```
+
+Then enable it in DMS: `Mod+,` → Plugins → enable **Dank Menu**. `dms plugins list`
+confirms the shell has picked it up, and `dms plugins update dankMenu` pulls a
+newer version later.
+
+<details>
+<summary><b>From a clone instead</b> — for hacking on it, or pinning it to the repo</summary>
+
+The directory name must match `plugin.json`'s `id`, `dankMenu`. Symlinking the
+clone means the plugin updates with a `git pull`:
 
 ```bash
 git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
@@ -55,20 +69,18 @@ mkdir -p ~/.config/DankMaterialShell/plugins
 ln -s ~/src/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
 ```
 
-Or copy the directory instead, if you don't want the clone lying around:
+Or copy the directory, if you don't want the clone lying around:
 
 ```bash
 git clone --depth 1 https://github.com/sitolam/dms-plugins /tmp/dms-plugins
 cp -r /tmp/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
 ```
 
-There is no build step and nothing to compile — the plugin is QML and JavaScript,
-and it references no path above its own root.
+</details>
 
-Then enable it in DMS: `Mod+,` → Plugins → enable **Dank Menu**. `dms plugins list`
-confirms the shell has picked it up.
-
-**On NixOS, via home-manager:**
+**On NixOS, via home-manager.** `dms plugins install` writes into `~/.config`,
+which a declarative setup usually doesn't want, so take the plugin as a flake
+package instead:
 
 ```nix
 programs.dank-material-shell.plugins.dankMenu = {

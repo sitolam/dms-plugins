@@ -5,11 +5,13 @@
 **Plugins for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell).**
 
 Written for [sitolamix](https://github.com/sitolam/sitolamix), but tied to nothing —
-each one installs from a plain `git clone` on any distro, and from a flake on NixOS.
+both are in the official plugin registry, so `dms plugins install` is all it takes
+on any distro, and NixOS gets them as flake packages.
 
 [![DMS](https://img.shields.io/badge/DMS-%E2%89%A5%201.5.0-6750a4?style=flat-square)](https://github.com/AvengeMedia/DankMaterialShell)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](#license)
 [![Compositors](https://img.shields.io/badge/compositors-niri%20%7C%20Hyprland%20%7C%20any-4c9a2a?style=flat-square)](#)
+[![Registry](https://img.shields.io/badge/DMS%20registry-listed-ff8f00?style=flat-square)](https://github.com/AvengeMedia/dms-plugin-registry)
 
 </div>
 
@@ -51,17 +53,32 @@ Face Mesh locally on the NPU.
 
 ## Install
 
-Every directory under `plugins/` is a complete DMS plugin. Nothing inside one
-references a path above its own root, so **copying that single directory is the
-whole install** — there is no build step, no bundler, and no repo-level state.
+Both plugins are listed in the official
+[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so the
+short answer on **any distro** is:
+
+```bash
+dms plugins install dankMenu
+dms plugins install mouthGuard
+```
+
+Then enable them in DMS under `Mod+,` → **Plugins**. `dms plugins list` shows
+what's installed, and `dms plugins update` pulls newer versions later.
+
+There is no build step for either plugin — they are QML and JavaScript, and
+neither references a path above its own directory. MouthGuard is the one
+exception to "nothing to build": it needs a Python detector with `cv2` and
+`openvino`, which on most distros is a package install and on NixOS is a
+`nix build`. See
+[its README](plugins/mouthguard/README.md#install-the-python-dependencies).
+
+<details>
+<summary><b>From a clone instead</b> — for hacking on a plugin, or pinning it to this repo</summary>
 
 DMS loads plugins from `~/.config/DankMaterialShell/plugins/<id>`, where `<id>`
-must match the `id` field in the plugin's `plugin.json` — `dankMenu` and
-`mouthGuard`, both camelCase, note the capital letters.
-
-### Any distro — symlink the clone
-
-The recommended route: the plugin updates with a `git pull`.
+must match the `id` in the plugin's `plugin.json` — `dankMenu` and `mouthGuard`,
+camelCase, note the capital letters. Symlink the clone and a `git pull` updates
+the plugin:
 
 ```bash
 git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
@@ -71,16 +88,19 @@ ln -s ~/src/dms-plugins/plugins/dankmenu   ~/.config/DankMaterialShell/plugins/d
 ln -s ~/src/dms-plugins/plugins/mouthguard ~/.config/DankMaterialShell/plugins/mouthGuard
 ```
 
-### Any distro — copy just one plugin
-
-If you don't want the clone lying around:
+Or copy just the one directory, if you don't want the clone lying around:
 
 ```bash
 git clone --depth 1 https://github.com/sitolam/dms-plugins /tmp/dms-plugins
 cp -r /tmp/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
 ```
 
+</details>
+
 ### NixOS, via home-manager
+
+`dms plugins install` writes into `~/.config`, which a declarative setup usually
+doesn't want, so take the plugins as flake packages instead:
 
 ```nix
 # flake.nix
@@ -104,19 +124,10 @@ With `managePluginSettings = true`, `plugin_settings.json` becomes a read-only
 store symlink, so plugins **must** be enabled declaratively as above — the DMS
 settings GUI cannot write to it.
 
-MouthGuard additionally needs its detector binary; on NixOS the ambient
-`python3` has neither `cv2` nor `openvino`, so link the flake's build in as the
-`result` the plugin looks for. See
+MouthGuard additionally needs its detector binary: the ambient `python3` on NixOS
+has neither `cv2` nor `openvino`, so link the flake's `mouthguard-detector` in as
+the `result` the plugin looks for. See
 [MouthGuard's README](plugins/mouthguard/README.md#install-the-python-dependencies).
-
-### Enabling
-
-However you installed, enable the plugin in DMS under `Mod+,` → **Plugins**, then
-restart the shell if it doesn't appear immediately.
-
-```bash
-dms plugins list      # confirm DMS sees it
-```
 
 ---
 
@@ -273,11 +284,12 @@ not package and OpenVINO will only load from beside its own libraries.
 
 ## Publishing a plugin to the DMS registry
 
-Plugins here are installable directly from this repo, but listing one in the
-[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry) makes
-it discoverable from `dms plugins install` and the in-shell plugin browser.
-The [official guide](https://danklinux.com/docs/contributing-registry) is the
-authority; the short version:
+Both plugins here are listed in the
+[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry) — that
+is what makes them installable with `dms plugins install` and findable in the
+in-shell plugin browser, rather than only by cloning this repo. Notes for adding
+another; the [official guide](https://danklinux.com/docs/contributing-registry)
+is the authority:
 
 1. Fork [`AvengeMedia/dms-plugin-registry`](https://github.com/AvengeMedia/dms-plugin-registry).
 2. Add `plugins/{github-username}-{plugin-name}.json`, lowercase and hyphenated

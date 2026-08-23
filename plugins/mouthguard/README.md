@@ -110,17 +110,24 @@ Reaching an Intel NPU takes three pieces, all of which the flake wires up for yo
 
 ### Install the plugin
 
-Via DMS's plugin manager:
+MouthGuard is listed in the
+[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so on any distro:
 ```bash
 dms plugins install mouthGuard
 ```
+`dms plugins update mouthGuard` pulls a newer version later.
 
-Or manually, from the [dms-plugins](https://github.com/sitolam/dms-plugins) monorepo — the
-directory name has to match `plugin.json`'s `id`, `mouthGuard`:
+<details>
+<summary><b>From a clone instead</b> — for hacking on it, or pinning it to the repo</summary>
+
+From the [dms-plugins](https://github.com/sitolam/dms-plugins) monorepo — the directory name has
+to match `plugin.json`'s `id`, `mouthGuard`:
 ```bash
 git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
 ln -s ~/src/dms-plugins/plugins/mouthguard ~/.config/DankMaterialShell/plugins/mouthGuard
 ```
+
+</details>
 
 Either way, **on NixOS run `nix build .#detector` inside that plugin directory before enabling
 it** — `result` is gitignored, so neither a fresh clone nor a fresh install via the plugin manager
