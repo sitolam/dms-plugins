@@ -46,14 +46,27 @@ in the right systemd scope rather than being reparented to the shell process.
 
 Requires DMS ≥ 1.5.0.
 
-**Manually:**
+**Manually — any distro.** The directory name must match `plugin.json`'s `id`,
+`dankMenu`. Symlinking the clone means the plugin updates with a `git pull`:
 
 ```bash
-git clone https://github.com/sitolam/dms-plugins
-ln -s "$PWD/dms-plugins/plugins/dankmenu" ~/.config/DankMaterialShell/plugins/dankMenu
+git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
+mkdir -p ~/.config/DankMaterialShell/plugins
+ln -s ~/src/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
 ```
 
-Then enable it in DMS: `Mod+,` → Plugins → enable **Dank Menu**.
+Or copy the directory instead, if you don't want the clone lying around:
+
+```bash
+git clone --depth 1 https://github.com/sitolam/dms-plugins /tmp/dms-plugins
+cp -r /tmp/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
+```
+
+There is no build step and nothing to compile — the plugin is QML and JavaScript,
+and it references no path above its own root.
+
+Then enable it in DMS: `Mod+,` → Plugins → enable **Dank Menu**. `dms plugins list`
+confirms the shell has picked it up.
 
 **On NixOS, via home-manager:**
 
@@ -81,6 +94,16 @@ For Hyprland:
 ```conf
 bind = SUPER, SPACE, exec, dms ipc call dankMenu toggle root
 ```
+
+For Sway:
+
+```
+bindsym $mod+space exec dms ipc call dankMenu toggle root
+```
+
+For anything else — river, Wayfire, a keybind daemon, a script: bind that same
+shell command. It is an ordinary one-shot process with no compositor-specific
+parts, so whatever can run a command can open the menu.
 
 ## Usage
 

@@ -115,9 +115,11 @@ Via DMS's plugin manager:
 dms plugins install mouthGuard
 ```
 
-Or manually:
+Or manually, from the [dms-plugins](https://github.com/sitolam/dms-plugins) monorepo — the
+directory name has to match `plugin.json`'s `id`, `mouthGuard`:
 ```bash
-git clone https://github.com/sitolam/dms-mouthguard ~/.config/DankMaterialShell/plugins/MouthGuard
+git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
+ln -s ~/src/dms-plugins/plugins/mouthguard ~/.config/DankMaterialShell/plugins/mouthGuard
 ```
 
 Either way, **on NixOS run `nix build .#detector` inside that plugin directory before enabling
