@@ -224,6 +224,10 @@ and `disabled` are shell snippets judged by exit status:
 }
 ```
 
+A fourth snippet, `labelCmd`, is judged by its *output* rather than its exit
+status — the first line of stdout becomes the row's label, so a row can show a
+live value instead of a fixed string.
+
 Because `menuPath` is just a path, the file can be generated — see
 [dankMenu's README](plugins/dankmenu/README.md#generating-the-tree) for the full
 field reference, the condition semantics, and a worked Nix example.
