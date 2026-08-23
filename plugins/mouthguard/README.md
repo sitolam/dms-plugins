@@ -10,11 +10,7 @@ page you keep open in a tab. Face tracking runs locally, on the same
 the web app uses, through [OpenVINO](https://docs.openvino.ai/) — on an Intel NPU where one is
 available, otherwise the iGPU or the CPU. Nothing leaves your machine.
 
-> **Screenshot:** not yet included. Capturing one requires enabling the plugin and opening the
-> popout with a live session running, which this documentation pass deliberately did not do — it
-> would mean touching a camera device and a live shell that belong to someone else. The project
-> owner will add `screenshot.png` and a `![MouthGuard popout](screenshot.png)` line here once
-> captured.
+![MouthGuard popout](screenshots/popout.png)
 
 ## Requirements
 
