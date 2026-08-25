@@ -1,0 +1,21 @@
+{
+    "id": "virtualKeyboard",
+    "name": "Virtual Keyboard",
+    "description": "On-screen keyboard overlay, toggled by IPC or an optional DankBar pill",
+    "version": "0.1.0",
+    "license": "MIT",
+    "author": "sitolam",
+    "icon": "keyboard",
+    "type": "composite",
+    "capabilities": ["daemon", "ipc", "dankbar-widget"],
+    "components": {
+        "daemon": "./VirtualKeyboardDaemon.qml",
+        "widget": "./VirtualKeyboardWidget.qml"
+    },
+    "settings": "./VirtualKeyboardSettings.qml",
+    "startupCheck": "./StartupCheck.qml",
+    "requires_dms": ">=1.5.0",
+    "dependencies": ["ydotool"],
+    "compositors": ["any"],
+    "permissions": ["settings_read", "settings_write", "process"]
+}
