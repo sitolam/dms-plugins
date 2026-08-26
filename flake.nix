@@ -32,6 +32,9 @@
         dankmenu = pkgs.runCommand "dms-plugin-dankmenu-src" { } ''
           cp -r ${./plugins/dankmenu} $out
         '';
+        virtualkeyboard = pkgs.runCommand "dms-plugin-virtualkeyboard-src" { } ''
+          cp -r ${./plugins/virtualkeyboard} $out
+        '';
 
         default = mouthguard-detector;
       });
@@ -55,6 +58,27 @@
             mkdir -p "$XDG_CACHE_HOME"
             cp -r ${./plugins/dankmenu} dankmenu
             for t in dankmenu/tests/tst_*.qml; do
+              echo "== $t"
+              qmltestrunner -input "$t"
+            done
+            touch $out
+          '';
+
+        # virtualKeyboard's key-sizing and layout tables are the same kind of
+        # import-free JavaScript, so they run here too. The QML that drives
+        # ydotool is not covered: it needs a compositor and a running daemon.
+        virtualkeyboard-qml = pkgs.runCommand "virtualkeyboard-qml-tests"
+          {
+            nativeBuildInputs = [ pkgs.qt6.qtdeclarative ];
+          }
+          ''
+            export QML_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml"
+            export QML2_IMPORT_PATH="$QML_IMPORT_PATH"
+            export QT_QPA_PLATFORM=offscreen
+            export XDG_CACHE_HOME="$PWD/.cache"
+            mkdir -p "$XDG_CACHE_HOME"
+            cp -r ${./plugins/virtualkeyboard} virtualkeyboard
+            for t in virtualkeyboard/tests/tst_*.qml; do
               echo "== $t"
               qmltestrunner -input "$t"
             done

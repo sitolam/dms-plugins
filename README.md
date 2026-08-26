@@ -5,7 +5,7 @@
 **Plugins for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell).**
 
 Written for [sitolamix](https://github.com/sitolam/sitolamix), but tied to nothing —
-both are in the official plugin registry, so `dms plugins install` is all it takes
+they are in the official plugin registry, so `dms plugins install` is all it takes
 on any distro, and NixOS gets them as flake packages.
 
 [![DMS](https://img.shields.io/badge/DMS-%E2%89%A5%201.5.0-6750a4?style=flat-square)](https://github.com/AvengeMedia/DankMaterialShell)
@@ -42,50 +42,72 @@ Face Mesh locally on the NPU.
 
 </td>
 </tr>
+<tr>
+<td width="50%" valign="top">
+
+### [virtualKeyboard](plugins/virtualkeyboard)
+
+On-screen keyboard that types real key events through `ydotool` — docked at
+the bottom, or pinned out into a movable window.
+
+<a href="plugins/virtualkeyboard"><img src="plugins/virtualkeyboard/screenshots/docked.png" alt="the docked virtual keyboard"></a>
+
+</td>
+<td width="50%" valign="top">
+
+&nbsp;
+
+</td>
+</tr>
 </table>
 
 | Plugin | Type | Needs | Docs |
 | --- | --- | --- | --- |
 | [`dankmenu`](plugins/dankmenu) | `daemon` | nothing beyond DMS | [README](plugins/dankmenu/README.md) |
 | [`mouthguard`](plugins/mouthguard) | `composite` | a webcam, `python3` + `cv2` + `openvino` | [README](plugins/mouthguard/README.md) |
+| [`virtualkeyboard`](plugins/virtualkeyboard) | `composite` | `ydotool`, with `ydotoold` running | [README](plugins/virtualkeyboard/README.md) |
 
 ---
 
 ## Install
 
-Both plugins are listed in the official
+All three plugins are listed in the official
 [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so the
 short answer on **any distro** is:
 
 ```bash
 dms plugins install dankMenu
 dms plugins install mouthGuard
+dms plugins install virtualKeyboard
 ```
 
 Then enable them in DMS under `Mod+,` → **Plugins**. `dms plugins list` shows
 what's installed, and `dms plugins update` pulls newer versions later.
 
-There is no build step for either plugin — they are QML and JavaScript, and
-neither references a path above its own directory. MouthGuard is the one
-exception to "nothing to build": it needs a Python detector with `cv2` and
-`openvino`, which on most distros is a package install and on NixOS is a
-`nix build`. See
-[its README](plugins/mouthguard/README.md#install-the-python-dependencies).
+There is no build step for any of them — they are QML and JavaScript, and none
+references a path above its own directory. Two need something from outside
+DMS, though: virtualKeyboard types through `ydotool`, so that has to be
+installed with its `ydotoold` daemon running (see
+[its README](plugins/virtualkeyboard/README.md#ydotool)), and MouthGuard needs
+a Python detector with `cv2` and `openvino`, which on most distros is a package
+install and on NixOS is a `nix build` (see
+[its README](plugins/mouthguard/README.md#install-the-python-dependencies)).
 
 <details>
 <summary><b>From a clone instead</b> — for hacking on a plugin, or pinning it to this repo</summary>
 
 DMS loads plugins from `~/.config/DankMaterialShell/plugins/<id>`, where `<id>`
-must match the `id` in the plugin's `plugin.json` — `dankMenu` and `mouthGuard`,
-camelCase, note the capital letters. Symlink the clone and a `git pull` updates
-the plugin:
+must match the `id` in the plugin's `plugin.json` — `dankMenu`, `mouthGuard` and
+`virtualKeyboard`, camelCase, note the capital letters. Symlink the clone and a
+`git pull` updates the plugin:
 
 ```bash
 git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
 mkdir -p ~/.config/DankMaterialShell/plugins
 
-ln -s ~/src/dms-plugins/plugins/dankmenu   ~/.config/DankMaterialShell/plugins/dankMenu
-ln -s ~/src/dms-plugins/plugins/mouthguard ~/.config/DankMaterialShell/plugins/mouthGuard
+ln -s ~/src/dms-plugins/plugins/dankmenu        ~/.config/DankMaterialShell/plugins/dankMenu
+ln -s ~/src/dms-plugins/plugins/mouthguard      ~/.config/DankMaterialShell/plugins/mouthGuard
+ln -s ~/src/dms-plugins/plugins/virtualkeyboard ~/.config/DankMaterialShell/plugins/virtualKeyboard
 ```
 
 Or copy just the one directory, if you don't want the clone lying around:
@@ -116,6 +138,10 @@ programs.dank-material-shell.plugins = {
   mouthGuard = {
     enable = true;
     src = inputs.dms-plugins.packages.${pkgs.system}.mouthguard;
+  };
+  virtualKeyboard = {
+    enable = true;
+    src = inputs.dms-plugins.packages.${pkgs.system}.virtualkeyboard;
   };
 };
 ```
@@ -258,13 +284,62 @@ every setting, and the detection semantics — is in
 
 ---
 
+## Using virtualKeyboard
+
+Install `ydotool` and start its `ydotoold` daemon first — the keyboard injects
+raw Linux input events rather than Wayland text input, which is what lets it
+type into terminals, games and password prompts like a physical keyboard
+would. [virtualKeyboard's README](plugins/virtualkeyboard/README.md#ydotool)
+covers the socket path, the usual reason it silently does nothing.
+
+Like dankMenu it ships no keybind, only IPC verbs:
+
+```bash
+dms ipc call virtualKeyboard toggle
+dms ipc call virtualKeyboard open
+dms ipc call virtualKeyboard close
+```
+
+**niri** — `~/.config/niri/config.kdl`:
+
+```kdl
+binds {
+    Mod+Shift+K { spawn "dms" "ipc" "call" "virtualKeyboard" "toggle"; }
+}
+```
+
+**Hyprland** — `~/.config/hypr/hyprland.conf`:
+
+```conf
+bind = SUPER SHIFT, K, exec, dms ipc call virtualKeyboard toggle
+```
+
+There is an optional DankBar pill too — a keyboard icon that lights up while
+the keyboard is open and toggles it on click, which on a touchscreen is the
+only way in, since a keybind needs a keyboard to press.
+
+It opens docked along the bottom of the screen, overlaying whatever is there
+rather than reserving space for itself. The pin button swaps it for an
+ordinary floating window — draggable by the empty padding around the buttons,
+stackable, and closable from its own titlebar:
+
+<div align="center"><img src="plugins/virtualkeyboard/screenshots/floating.png" alt="the pinned floating keyboard" width="85%"></div>
+
+Modifiers latch instead of needing two hands: `Shift` arms for one key, a
+second tap caps-locks it, and `Ctrl` / `Alt` / `Menu` stay held until pressed
+again. Number and symbol keys print their shifted character in the corner, the
+way a physical keycap does.
+
+---
+
 ## Development
 
 ```bash
 nix develop
-pytest plugins/mouthguard                                     # MouthGuard's Python suite
-qmltestrunner -input plugins/dankmenu/tests/tst_menumodel.qml # one file per run
-nix flake check                                               # everything, headless
+pytest plugins/mouthguard                                       # MouthGuard's Python suite
+qmltestrunner -input plugins/dankmenu/tests/tst_menumodel.qml   # one file per run
+qmltestrunner -input plugins/virtualkeyboard/tests/tst_layout_us.qml
+nix flake check                                                 # everything, headless
 ```
 
 `qmltestrunner` takes one `-input` file per run, and its exit code is the
@@ -284,7 +359,7 @@ not package and OpenVINO will only load from beside its own libraries.
 
 ## Publishing a plugin to the DMS registry
 
-Both plugins here are listed in the
+All three plugins here are listed in the
 [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry) — that
 is what makes them installable with `dms plugins install` and findable in the
 in-shell plugin browser, rather than only by cloning this repo. Notes for adding
@@ -330,8 +405,16 @@ the `compositors` and `distro` values are ones you have actually tested.
 
 dankMenu's design is [Omarchy](https://github.com/basecamp/omarchy)'s, by
 [Basecamp](https://basecamp.com) and its contributors (MIT) — it shares no code,
-but deliberately keeps their menu file schema field-for-field. MouthGuard is a
-native port of [sitolam/mouthguard](https://github.com/sitolam/mouthguard).
+but deliberately keeps their menu file schema field-for-field.
+
+virtualKeyboard's design is [end-4](https://github.com/end-4)'s, from
+[dots-hyprland](https://github.com/end-4/dots-hyprland) (GPL-3.0) — the docked
+card, the key shapes, the latching modifiers and the pin-to-float idea are all
+theirs, and its US QWERTY table is a port of their `layouts.js` "English (US)"
+entry. Thank you, end-4: the whole rice is worth a look, DMS or not.
+
+MouthGuard is a native port of
+[sitolam/mouthguard](https://github.com/sitolam/mouthguard).
 
 ## License
 
