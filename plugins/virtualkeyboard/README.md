@@ -22,6 +22,9 @@ theirs, and this plugin's US QWERTY table is a port of their `layouts.js`
 "English (US)" entry. Their dotfiles are worth a look regardless of whether
 you run DMS.
 
+Porting their tables makes this plugin a derivative work, which is why this
+repo is GPL-3.0 rather than MIT.
+
 ## How it types
 
 Keys are injected as raw Linux input events through
@@ -174,4 +177,4 @@ failure count rather than a flat 1.
 
 ## License
 
-MIT.
+GPL-3.0-only — see [`../../LICENSE`](../../LICENSE).

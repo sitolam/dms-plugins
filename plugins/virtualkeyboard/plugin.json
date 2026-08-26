@@ -3,7 +3,7 @@
     "name": "Virtual Keyboard",
     "description": "On-screen keyboard overlay, toggled by IPC or an optional DankBar pill",
     "version": "0.1.0",
-    "license": "MIT",
+    "license": "GPL-3.0-only",
     "author": "sitolam",
     "icon": "keyboard",
     "type": "composite",

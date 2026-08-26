@@ -303,4 +303,4 @@ functions, not just "something failed."
 
 ## License
 
-MIT — see `LICENSE`.
+GPL-3.0-only — see `LICENSE`.

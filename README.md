@@ -9,7 +9,7 @@ they are in the official plugin registry, so `dms plugins install` is all it tak
 on any distro, and NixOS gets them as flake packages.
 
 [![DMS](https://img.shields.io/badge/DMS-%E2%89%A5%201.5.0-6750a4?style=flat-square)](https://github.com/AvengeMedia/DankMaterialShell)
-[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](#license)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](#license)
 [![Compositors](https://img.shields.io/badge/compositors-niri%20%7C%20Hyprland%20%7C%20any-4c9a2a?style=flat-square)](#)
 [![Registry](https://img.shields.io/badge/DMS%20registry-listed-ff8f00?style=flat-square)](https://github.com/AvengeMedia/dms-plugin-registry)
 
@@ -418,4 +418,11 @@ MouthGuard is a native port of
 
 ## License
 
-MIT.
+GPL-3.0-only — see [`LICENSE`](LICENSE).
+
+The repo was MIT until virtualKeyboard landed. Its key tables are ported from
+end-4's GPL-3.0 dots-hyprland, which makes that plugin a derivative work, and
+MIT cannot promise freedoms the GPL withholds — so everything here moved to
+GPL-3.0 rather than carrying two licenses and a footnote on which applies
+where. dankMenu and MouthGuard are unencumbered by anyone else's code; they
+are GPL by choice, not obligation.

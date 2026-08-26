@@ -3,7 +3,7 @@
     "name": "MouthGuard",
     "description": "Webcam mouth-closure tracker with alerts and session stats",
     "version": "0.2.0",
-    "license": "MIT",
+    "license": "GPL-3.0-only",
     "author": "sitolam",
     "icon": "sentiment_satisfied",
     "type": "composite",
