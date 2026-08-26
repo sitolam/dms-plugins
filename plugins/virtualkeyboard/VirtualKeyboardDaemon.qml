@@ -68,6 +68,9 @@ PluginComponent {
     // from inside it -- hence the Qt.callLater at each call site landing
     // here rather than touching the loaders directly.
     function switchWindowMode() {
+        // The window carrying the latched-modifier buttons is about to be
+        // destroyed, so anything it is holding down has to come up first.
+        ydotoolService.releaseAllKeys()
         dockedLoader.active = false
         floatingLoader.active = false
         openKeyboard()

@@ -16,8 +16,8 @@ PluginSettings {
 
     ToggleSetting {
         settingKey: "pinnedOnStartup"
-        label: "Pin on startup"
-        description: "Reserve screen space for the keyboard immediately, instead of only once pinned by hand"
+        label: "Float by default"
+        description: "Open the keyboard as a movable floating window rather than docked at the bottom of the screen"
         defaultValue: false
     }
 }

@@ -122,8 +122,10 @@ StyledRect {
                 }
             } else if (root.keytype === "modkey") {
                 root.modToggled = !root.modToggled
-                if (!root.modToggled)
-                    root.ydotool.release(root.keycode)
+                if (root.modToggled)
+                    root.ydotool.retainHeld(root.keycode)
+                else
+                    root.ydotool.releaseHeld(root.keycode)
             }
         }
     }
