@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -11,15 +10,20 @@ PanelWindow {
 
     required property var ydotool
     property bool keyboardVisible: false
-    property bool pinned: false
 
     signal keyboardClosed
+    // Pin clicked while docked: this window has no way to become a
+    // FloatingWindow itself (different Quickshell window class entirely),
+    // so it asks the daemon to close this one and open the floating variant.
+    signal pinRequested
 
     function show() {
         keyboardVisible = true
     }
 
     function hide() {
+        if (!keyboardVisible)
+            return
         keyboardVisible = false
         keyboardClosed()
     }
@@ -33,7 +37,7 @@ PanelWindow {
         right: true
     }
 
-    exclusiveZone: root.pinned ? implicitHeight - Theme.spacingL : 0
+    exclusiveZone: 0
     implicitWidth: card.width
     implicitHeight: card.height + Theme.spacingL * 2
 
@@ -60,53 +64,16 @@ PanelWindow {
 
         Keys.onEscapePressed: root.hide()
 
-        StyledRect {
+        KeyboardCard {
             id: card
 
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Theme.spacingL
-            width: content.implicitWidth + Theme.spacingL * 2
-            height: content.implicitHeight + Theme.spacingL * 2
-            radius: Theme.cornerRadius
-            color: Theme.readableSurface
-            border.width: 1
-            border.color: Theme.outlineVariant
-
-            RowLayout {
-                id: content
-                anchors.centerIn: parent
-                spacing: Theme.spacingM
-
-                ColumnLayout {
-                    spacing: Theme.spacingXS
-
-                    DankActionButton {
-                        iconName: "keep"
-                        iconColor: root.pinned ? Theme.primary : Theme.surfaceText
-                        tooltipText: root.pinned ? "Unpin" : "Pin"
-                        onClicked: root.pinned = !root.pinned
-                    }
-
-                    DankActionButton {
-                        iconName: "keyboard_hide"
-                        tooltipText: "Hide"
-                        onClicked: root.hide()
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillHeight: true
-                    Layout.topMargin: Theme.spacingM
-                    Layout.bottomMargin: Theme.spacingM
-                    implicitWidth: 1
-                    color: Theme.outlineVariant
-                }
-
-                KeyboardLayout {
-                    ydotool: root.ydotool
-                }
-            }
+            ydotool: root.ydotool
+            pinned: false
+            onPinClicked: root.pinRequested()
+            onHideClicked: root.hide()
         }
     }
 }
