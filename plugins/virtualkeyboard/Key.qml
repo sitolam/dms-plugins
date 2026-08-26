@@ -7,13 +7,13 @@ StyledRect {
     id: root
 
     required property var keyData
-    required property var ydotool
+    property var ydotool: null
 
     readonly property string keytype: keyData.keytype
     readonly property string shape: keyData.shape
     readonly property int keycode: keyData.keycode || 0
     readonly property bool isEmpty: shape === "empty"
-    readonly property bool isShiftKey: ydotool.shiftKeycodes.indexOf(keycode) !== -1
+    readonly property bool isShiftKey: !!ydotool && ydotool.shiftKeycodes.indexOf(keycode) !== -1
     readonly property bool isBackspace: keyData.label === "Backspace"
     readonly property bool isEnter: keyData.label === "Enter"
     readonly property bool latched: (isShiftKey && ydotool.shiftMode > 0) || (keytype === "modkey" && !isShiftKey && modToggled)
@@ -31,7 +31,11 @@ StyledRect {
     visible: !isEmpty
     enabled: !isEmpty
     radius: Theme.cornerRadius
-    color: isPressed ? Theme.primaryPressed : latched ? Theme.primaryContainer : Theme.surfaceContainerHigh
+    // A light accent tint rather than a neutral grey tile -- keys pick up
+    // DMS's own primary color at low alpha (same family as Theme.primaryHover),
+    // so the keyboard reads as part of the theme instead of a flat grid of
+    // grey blocks pasted over the blurred card.
+    color: isPressed ? Theme.primaryPressed : latched ? Theme.primarySelected : Theme.withAlpha(Theme.primary, 0.08)
 
     DankIcon {
         anchors.centerIn: parent
@@ -41,12 +45,32 @@ StyledRect {
         color: root.latched ? Theme.primary : Theme.surfaceText
     }
 
+    // Letters skip the corner label -- shift+letter is just the uppercase
+    // form, obvious without a hint. Only symbol/number keys (whose shifted
+    // character isn't guessable) get one.
+    readonly property bool isLetter: /^[a-zA-Z]$/.test(keyData.label)
+    readonly property bool showsSecondaryLabel: !isBackspace && !isEnter && !isShiftKey && !isLetter && !!keyData.labelShift
+
     StyledText {
         anchors.centerIn: parent
         visible: !root.isBackspace && !root.isEnter
-        text: KeyShape.labelFor(root.keyData, root.isShiftKey ? root.ydotool.shiftMode : 0)
+        text: KeyShape.labelFor(root.keyData, root.ydotool ? root.ydotool.shiftMode : 0)
         font.pixelSize: root.shape === "fn" ? Theme.fontSizeSmall : Theme.fontSizeMedium
         color: root.latched ? Theme.primary : Theme.surfaceText
+    }
+
+    // A physical keycap shows both characters at once (main centered, the
+    // shifted one small in the corner) rather than only revealing it once
+    // shift is actually held -- otherwise there's no way to tell `1` gives
+    // `!` without pressing shift first.
+    StyledText {
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 3
+        visible: root.showsSecondaryLabel
+        text: !root.ydotool ? "" : (root.ydotool.shiftMode === 0 ? (root.keyData.labelShift || "") : root.keyData.label)
+        font.pixelSize: Theme.fontSizeSmall - 2
+        color: root.latched ? Theme.primary : Theme.surfaceVariantText
     }
 
     Timer {

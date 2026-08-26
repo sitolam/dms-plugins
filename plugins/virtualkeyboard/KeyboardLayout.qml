@@ -5,7 +5,7 @@ import "layout-us.js" as LayoutUs
 ColumnLayout {
     id: root
 
-    required property var ydotool
+    property var ydotool: null
 
     spacing: 6
 
