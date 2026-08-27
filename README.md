@@ -60,7 +60,7 @@ the bottom, or pinned out into a movable window.
 One bar button that drops a panel of real bar widgets *below* the bar, where a
 crowded side section has no room to expand along it.
 
-<a href="plugins/bardropdown"><img src="plugins/bardropdown/screenshots/bar.png" alt="the barDropdown button on the bar"></a>
+<a href="plugins/bardropdown"><img src="plugins/bardropdown/screenshots/panel.png" alt="the barDropdown panel open below the bar"></a>
 
 </td>
 </tr>

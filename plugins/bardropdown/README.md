@@ -6,10 +6,14 @@ Click the button, and the widgets you listed appear in a small panel hanging
 under it — each one live, with its own working popout. Click again to close.
 Nothing on the bar moves, and nothing on the bar is covered.
 
+![the barDropdown panel open below the bar](screenshots/panel.png)
+
+Open: ambient sound, the system tray and the USB manager hanging under the
+button — the tray items are the real ones, not icons drawn to look like them.
+
 ![the barDropdown button on the bar](screenshots/bar.png)
 
-Collapsed: one button where the ambient-sound, system-tray and USB widgets used
-to sit.
+Closed: one button where those three used to sit.
 
 ## Why not just collapse them in place?
 
