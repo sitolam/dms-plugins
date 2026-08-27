@@ -35,6 +35,9 @@
         virtualkeyboard = pkgs.runCommand "dms-plugin-virtualkeyboard-src" { } ''
           cp -r ${./plugins/virtualkeyboard} $out
         '';
+        bardropdown = pkgs.runCommand "dms-plugin-bardropdown-src" { } ''
+          cp -r ${./plugins/bardropdown} $out
+        '';
 
         default = mouthguard-detector;
       });

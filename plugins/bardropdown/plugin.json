@@ -1,0 +1,20 @@
+{
+  "id": "barDropdown",
+  "name": "Bar Dropdown",
+  "description": "One bar button that drops a panel of real bar widgets below the bar, instead of expanding along it.",
+  "version": "0.1.0",
+  "author": "sitolam",
+  "icon": "widgets",
+  "type": "widget",
+  "category": "utilities",
+  "capabilities": [
+    "dankbar-widget"
+  ],
+  "component": "./BarDropdownWidget.qml",
+  "settings": "./BarDropdownSettings.qml",
+  "repo": "https://github.com/sitolam/dms-plugins",
+  "permissions": [
+    "settings_read",
+    "settings_write"
+  ]
+}

@@ -55,7 +55,12 @@ the bottom, or pinned out into a movable window.
 </td>
 <td width="50%" valign="top">
 
-&nbsp;
+### [barDropdown](plugins/bardropdown)
+
+One bar button that drops a panel of real bar widgets *below* the bar, where a
+crowded side section has no room to expand along it.
+
+<a href="plugins/bardropdown"><img src="plugins/bardropdown/screenshots/bar.png" alt="the barDropdown button on the bar"></a>
 
 </td>
 </tr>
@@ -66,12 +71,13 @@ the bottom, or pinned out into a movable window.
 | [`dankmenu`](plugins/dankmenu) | `daemon` | nothing beyond DMS | [README](plugins/dankmenu/README.md) |
 | [`mouthguard`](plugins/mouthguard) | `composite` | a webcam, `python3` + `cv2` + `openvino` | [README](plugins/mouthguard/README.md) |
 | [`virtualkeyboard`](plugins/virtualkeyboard) | `composite` | `ydotool`, with `ydotoold` running | [README](plugins/virtualkeyboard/README.md) |
+| [`bardropdown`](plugins/bardropdown) | `widget` | nothing beyond DMS | [README](plugins/bardropdown/README.md) |
 
 ---
 
 ## Install
 
-All three plugins are listed in the official
+These plugins are listed in the official
 [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so the
 short answer on **any distro** is:
 
@@ -79,6 +85,7 @@ short answer on **any distro** is:
 dms plugins install dankMenu
 dms plugins install mouthGuard
 dms plugins install virtualKeyboard
+dms plugins install barDropdown
 ```
 
 Then enable them in DMS under `Mod+,` → **Plugins**. `dms plugins list` shows
@@ -97,9 +104,9 @@ install and on NixOS is a `nix build` (see
 <summary><b>From a clone instead</b> — for hacking on a plugin, or pinning it to this repo</summary>
 
 DMS loads plugins from `~/.config/DankMaterialShell/plugins/<id>`, where `<id>`
-must match the `id` in the plugin's `plugin.json` — `dankMenu`, `mouthGuard` and
-`virtualKeyboard`, camelCase, note the capital letters. Symlink the clone and a
-`git pull` updates the plugin:
+must match the `id` in the plugin's `plugin.json` — `dankMenu`, `mouthGuard`,
+`virtualKeyboard` and `barDropdown`, camelCase, note the capital letters.
+Symlink the clone and a `git pull` updates the plugin:
 
 ```bash
 git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
@@ -108,6 +115,7 @@ mkdir -p ~/.config/DankMaterialShell/plugins
 ln -s ~/src/dms-plugins/plugins/dankmenu        ~/.config/DankMaterialShell/plugins/dankMenu
 ln -s ~/src/dms-plugins/plugins/mouthguard      ~/.config/DankMaterialShell/plugins/mouthGuard
 ln -s ~/src/dms-plugins/plugins/virtualkeyboard ~/.config/DankMaterialShell/plugins/virtualKeyboard
+ln -s ~/src/dms-plugins/plugins/bardropdown     ~/.config/DankMaterialShell/plugins/barDropdown
 ```
 
 Or copy just the one directory, if you don't want the clone lying around:
@@ -143,8 +151,18 @@ programs.dank-material-shell.plugins = {
     enable = true;
     src = inputs.dms-plugins.packages.${pkgs.system}.virtualkeyboard;
   };
+  barDropdown = {
+    enable = true;
+    src = inputs.dms-plugins.packages.${pkgs.system}.bardropdown;
+    settings.targets = [ "ambientSound" "systemTray" "usbManager" ];
+  };
 };
 ```
+
+barDropdown is the one plugin here whose settings have to line up with the bar
+itself: every id in `targets` must be a widget the bar knows, and none of them
+may also appear in the bar's own widget list, or it will be rendered twice. Add
+`barDropdown` to a bar section in its place.
 
 With `managePluginSettings = true`, `plugin_settings.json` becomes a read-only
 store symlink, so plugins **must** be enabled declaratively as above — the DMS
