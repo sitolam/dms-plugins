@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.1
+
+### Fixed
+
+- **A launcher plugin's second answer now reaches the list.** Plugins that
+  answer asynchronously — the calculator with its `qalc`/`numbat` engines
+  returns a "Calculating..." placeholder and the real result once its process
+  replies — were stuck on the placeholder here. The rows were rebuilt on
+  keystrokes, level changes and settled conditions, but not on
+  `PluginService.requestLauncherUpdate`, which is how DMS announces a late
+  answer and how spotlight knows to redraw. The menu now rebuilds on it too,
+  holding the selected row.
+
 ## 0.3.0
 
 ### Added

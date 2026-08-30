@@ -130,6 +130,17 @@ PanelWindow {
 
     PluginSource {
         id: pluginSource
+
+        // Late plugin answers rebuild the rows in place, holding the highlight
+        // where it was -- the same treatment Conditions.onSettled gives a
+        // condition that resolves after its level was drawn.
+        onItemsUpdated: {
+            if (!root.menuVisible)
+                return;
+            const selected = list.rows[list.currentIndex];
+            list.rows = root.rowsFor(root.currentId, root.query);
+            list.currentIndex = root.indexOfRow(selected ? selected.id : "");
+        }
     }
 
     // selectId: which row to land on. Popping back out of a submenu passes the

@@ -63,6 +63,21 @@ Item {
         return out;
     }
 
+    // A launcher plugin may answer twice: the calculator's qalc engine returns
+    // a "Calculating..." placeholder row and the real result once its process
+    // replies. PluginService announces the second answer with
+    // requestLauncherUpdate -- DMS's own launcher rebuilds its list on it
+    // (Modals/DankLauncherV2/Controller.qml) -- so a caller that only rebuilds
+    // on keystrokes shows the placeholder forever.
+    signal itemsUpdated(string pluginId)
+
+    Connections {
+        target: root.available ? PluginService : null
+        function onRequestLauncherUpdate(pluginId) {
+            root.itemsUpdated(pluginId);
+        }
+    }
+
     function run(row) {
         if (!available)
             return false;
