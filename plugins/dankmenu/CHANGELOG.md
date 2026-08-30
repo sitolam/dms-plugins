@@ -20,6 +20,16 @@
   scorer and modal are still untouched, and the menu still owns its own window,
   search and app list.
 
+### Changed
+
+- **Typing no longer re-runs a level's conditions.** They were re-evaluated on
+  every keystroke, and a search from the root covers the whole tree — so one
+  condition costing a second (a `docker stats`, an `ssh`) was paid once per
+  character. Identical condition sets now collapse to a single run, a burst of
+  typing is debounced to one, and results stay on screen until the new ones
+  land instead of blinking off between keystrokes. Entering a level still
+  re-runs its conditions, which is what makes them a snapshot.
+
 ## 0.2.0
 
 ### Added

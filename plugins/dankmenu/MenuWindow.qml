@@ -122,6 +122,9 @@ PanelWindow {
         searchInput.text = "";
         list.rows = rowsFor(id, "");
         list.currentIndex = indexOfRow(selectId);
+        // Entering a level is what makes its conditions a fresh snapshot, so
+        // this run happens even if the same level was just evaluated.
+        conditions.invalidate();
         evaluateConditions();
     }
 
@@ -142,10 +145,11 @@ PanelWindow {
     }
 
     // A search reaches the whole subtree, so its conditions are the subtree's;
-    // an unfiltered level only needs its own children.
+    // an unfiltered level only needs its own children. Conditions itself drops
+    // a repeat of the set it already ran, so typing through a level of slow
+    // conditions costs one run rather than one per keystroke.
     function evaluateConditions() {
         const nodes = query ? MenuModel.leavesUnder(tree, currentId) : MenuModel.childrenOf(tree, currentId);
-        conditions.clear();
         conditions.evaluate(nodes);
     }
 
