@@ -42,9 +42,10 @@ prevent it. "Enter descends into a submenu" is therefore impossible there —
 selecting a row always closes the launcher.
 
 So dankMenu is a `daemon` plugin owning its own wlr-layershell window, and its
-search, ranking and app list are its own code. The only thing borrowed from the
-shell is `SessionService.launchDesktopEntry`, so apps started from the menu land
-in the right systemd scope rather than being reparented to the shell process.
+search, ranking and app list are its own code. Two things are borrowed from the
+shell rather than rebuilt: `SessionService.launchDesktopEntry`, so apps started
+from the menu land in the right systemd scope instead of being reparented to the
+shell process, and the launcher plugins themselves — see below.
 
 ## Install
 
@@ -289,6 +290,33 @@ so one keystroke sequence finds either a command or a program.
 
 ![the apps provider](screenshots/apps.png)
 
+### Launcher plugins
+
+Your `type: launcher` plugins — calculator, emoji, whatever else you have
+installed — work here too, under the same triggers they use in spotlight:
+
+```
+=12*30      calculator
+;shrug      emoji
+```
+
+The trigger is honoured at **any level**, not just the root: the prefix is
+explicit intent, and the level you are standing in has nothing to say about an
+arithmetic expression. A plugin's rows come back in the plugin's own order,
+unranked — this menu's scorer would throw away a calculator result whose label
+(`360`) shares no letters with the query that produced it.
+
+A plugin set to *always active* in DMS (its trigger cleared) needs no prefix. It
+answers every **root** search, and its rows sit above the apps and commands.
+
+Nothing here is configured in dankMenu: the list of plugins, their triggers and
+their settings are DMS's, under `Mod+,` → Plugins, and a change there takes
+effect in the menu immediately. Selecting a plugin row runs it through DMS,
+which is what puts a calculator result on the clipboard.
+
+Plugins are asked for rows only while the menu is open and only for the query as
+typed, so an unused plugin costs nothing.
+
 ### Generating the tree
 
 Because `menuPath` is just a path, the file can be generated. On NixOS that
@@ -313,16 +341,17 @@ nix develop ../..
 qmltestrunner -input tests/tst_menumodel.qml
 qmltestrunner -input tests/tst_search.qml
 qmltestrunner -input tests/tst_conditions.qml
+qmltestrunner -input tests/tst_plugins.qml
 ```
 
 `qmltestrunner` takes one `-input` per run and exits with the failure count.
-`nix flake check` runs all three headless.
+`nix flake check` runs all four headless.
 
 `MenuModel.js` (JSONC parsing, tree building, route resolution), `Search.js`
-(scoring and ranking) and `Conditions.js` (script generation and output
-parsing) import no QML types at all, so the tests exercise the exact files the
-plugin loads rather than copies of them. The QML files are thin shells over
-those three.
+(scoring and ranking), `Conditions.js` (script generation and output parsing)
+and `Plugins.js` (trigger detection, plugin items to menu rows) import no QML
+types at all, so the tests exercise the exact files the plugin loads rather than
+copies of them. The QML files are thin shells over those four.
 
 | file | responsibility |
 | --- | --- |
@@ -331,6 +360,7 @@ those three.
 | `MenuList.qml` | list and row delegate |
 | `Conditions.qml` | runs the generated condition script |
 | `AppSource.qml` | desktop entries in, menu rows out |
+| `PluginSource.qml` | DMS launcher plugins in, menu rows out |
 
 ## License
 

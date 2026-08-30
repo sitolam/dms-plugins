@@ -38,6 +38,15 @@ PanelWindow {
     // runnable leaf at or below this level, ranked, each captioned with where
     // it lives. That makes the root a command palette without a separate mode.
     function rowsFor(id, q) {
+        // A launcher plugin's trigger takes the query whole, at any level: the
+        // prefix is explicit intent, and the level's scope has nothing to say
+        // about "= 12 * 30". Its rows are returned unranked -- the plugin
+        // already ordered them, and our scorer would throw away a calculator
+        // result whose label ("360") shares no letters with the query.
+        const fired = pluginSource.detect(q || "");
+        if (fired)
+            return pluginSource.rowsFrom(fired.pluginId, fired.query);
+
         const node = id ? tree.nodes[id] : null;
         if (node && node.provider === "apps")
             return Search.rank(q || "", appSource.entries());
@@ -86,11 +95,22 @@ PanelWindow {
         if (!id)
             entries.push.apply(entries, appSource.entries());
 
-        return Search.rank(q, entries);
+        const ranked = Search.rank(q, entries);
+        if (id)
+            return ranked;
+
+        // Trigger-less launcher plugins answer every root query. They go on top
+        // unranked, for the same reason a triggered plugin's rows are: a plugin
+        // returning anything at all has already decided the query was for it.
+        return pluginSource.untriggeredRows(q).concat(ranked);
     }
 
     AppSource {
         id: appSource
+    }
+
+    PluginSource {
+        id: pluginSource
     }
 
     // selectId: which row to land on. Popping back out of a submenu passes the
@@ -162,6 +182,12 @@ PanelWindow {
     }
 
     function run(row) {
+        if (row.kind === "plugin") {
+            pluginSource.run(row);
+            closeMenu();
+            return;
+        }
+
         if (row.kind === "app") {
             appSource.launch(row);
             closeMenu();

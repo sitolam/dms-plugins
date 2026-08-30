@@ -3,12 +3,14 @@ import Quickshell
 import qs.Common
 import qs.Services
 
-// The plugin's own app list. DMS's launcher search is not reachable from a
-// plugin, and reaching for it would couple this menu to the spotlight it
-// replaces -- so the listing, the captions and the ranking are local. The one
-// thing that is deliberately NOT reimplemented is launching: SessionService
-// knows about uwsm and systemd scopes, and getting that wrong silently breaks
-// process accounting for every app started from here.
+// The plugin's own app list. AppSearchService would serve one -- PluginSource
+// uses it for launcher plugins -- but its results come pre-shaped for
+// spotlight's sections and scorer, and taking them would put this menu's
+// ordering, captions and cache behaviour in spotlight's hands. So the listing,
+// the captions and the ranking are local. The one thing that is deliberately
+// NOT reimplemented is launching: SessionService knows about uwsm and systemd
+// scopes, and getting that wrong silently breaks process accounting for every
+// app started from here.
 Item {
     id: root
 

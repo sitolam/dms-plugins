@@ -1,9 +1,8 @@
 .pragma library
 
-// Written for this plugin. DMS's own launcher scorer lives behind
-// AppSearchService/DankLauncherV2 and is not reachable from a plugin, and
-// reaching for it would couple the menu to the spotlight it deliberately
-// replaces.
+// Written for this plugin. DMS's own scorer lives inside DankLauncherV2, whose
+// QML is not importable from a plugin directory -- and its ranking is tuned for
+// spotlight's sectioned result list rather than for one flat level of a tree.
 
 var LABEL_WEIGHT = 1.0;
 var COMMENT_WEIGHT = 0.6;

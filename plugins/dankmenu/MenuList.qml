@@ -5,7 +5,7 @@ import qs.Widgets
 ListView {
     id: root
 
-    // rows: [{ id, label, icon, kind, comment, checked, disabled }]
+    // rows: [{ id, label, icon, iconType, kind, comment, checked, disabled }]
     property var rows: []
     property int iconSize: 22
 
@@ -33,6 +33,13 @@ ListView {
         readonly property color contentColor: index === root.currentIndex ? Theme.surface : Theme.surfaceText
         readonly property color subtleColor: index === root.currentIndex ? Theme.surface : Theme.surfaceVariantText
 
+        // Which of the three renderers below draws this row's icon. Launcher
+        // plugins say so themselves (Plugins.js reads DMS's "material:" /
+        // "unicode:" / "image:" prefixes); menu rows name a Material Symbols
+        // glyph and app rows an icon-theme entry, neither of which carries a
+        // prefix to read.
+        readonly property string iconKind: modelData.iconType ? modelData.iconType : (modelData.kind === "app" ? "image" : "material")
+
         MouseArea {
             anchors.fill: parent
             enabled: !delegateRoot.modelData.disabled
@@ -50,11 +57,11 @@ ListView {
             anchors.rightMargin: Theme.spacingS
             spacing: Theme.spacingM
 
-            // Two renderers, because the two kinds of icon are unrelated:
-            // menu rows name a Material Symbols glyph ("school", "wifi"),
-            // while app rows name an icon-theme entry ("firefox"). DankIcon
-            // only draws the former -- handing it a theme name renders
-            // nothing at all.
+            // Three renderers, because the kinds of icon are unrelated: menu
+            // rows name a Material Symbols glyph ("school", "wifi"), app rows
+            // name an icon-theme entry ("firefox"), and a launcher plugin may
+            // hand over a literal character instead of either. DankIcon only
+            // draws the first -- handing it a theme name renders nothing at all.
             Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: delegateRoot.modelData.icon !== ""
@@ -63,7 +70,7 @@ ListView {
 
                 DankIcon {
                     anchors.centerIn: parent
-                    visible: delegateRoot.modelData.kind !== "app"
+                    visible: delegateRoot.iconKind === "material"
                     name: delegateRoot.modelData.icon
                     size: Theme.fontSizeLarge
                     color: delegateRoot.contentColor
@@ -71,10 +78,18 @@ ListView {
 
                 AppIconRenderer {
                     anchors.fill: parent
-                    visible: delegateRoot.modelData.kind === "app"
+                    visible: delegateRoot.iconKind === "image"
                     iconValue: delegateRoot.modelData.icon
                     iconSize: root.iconSize
                     fallbackText: delegateRoot.modelData.label.length > 0 ? delegateRoot.modelData.label.charAt(0).toUpperCase() : "?"
+                }
+
+                StyledText {
+                    anchors.centerIn: parent
+                    visible: delegateRoot.iconKind === "unicode"
+                    text: delegateRoot.modelData.icon
+                    color: delegateRoot.contentColor
+                    font.pixelSize: Theme.fontSizeLarge
                 }
             }
 

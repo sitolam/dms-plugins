@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.0
+
+### Added
+
+- **DMS launcher plugins.** `type: launcher` plugins — calculator, emoji and the
+  rest — now answer in this menu under the same triggers they use in spotlight,
+  at any level. A plugin left with no trigger ("always active") answers every
+  root search. Their rows come back in the plugin's own order, unranked: this
+  menu's scorer would drop a calculator result whose label shares no letters
+  with the query that produced it.
+
+  Nothing about them is configured here. The plugin list, the triggers and the
+  settings stay DMS's, and running a row goes through DMS too — which is what
+  puts a calculator result on the clipboard.
+
+  The plugins are reached through `PluginService` and `AppSearchService`, which
+  is *not* the launcher coupling the plugin avoids: spotlight's controller,
+  scorer and modal are still untouched, and the menu still owns its own window,
+  search and app list.
+
 ## 0.2.0
 
 ### Added
