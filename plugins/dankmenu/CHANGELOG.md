@@ -30,6 +30,11 @@
   land instead of blinking off between keystrokes. Entering a level still
   re-runs its conditions, which is what makes them a snapshot.
 
+- **The search field is no longer a grey slab.** It picks up the same
+  translucency, outline and focus treatment DMS gives its own search fields, so
+  the blur behind the card shows through it, and it gained a leading search
+  glyph.
+
 ## 0.2.0
 
 ### Added

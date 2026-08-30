@@ -31,6 +31,25 @@ PanelWindow {
     // override is silently rejected.
     signal menuClosed
 
+    // The search field's colours, worked out the way spotlight works out its
+    // own (Modals/DankLauncherV2/LauncherContent.qml): a flat surfaceContainerHigh
+    // slab reads as a grey brick on a card that is itself translucent over a
+    // blur. Letting the blur through the field instead keeps it part of the
+    // card, and the alpha has to follow the user's blur settings or a
+    // transparent theme gets an opaque field and an opaque one gets a milky
+    // rectangle.
+    readonly property bool blurredLayers: Theme.blurForegroundLayers || Theme.transparentBlurLayers
+    readonly property real fieldAlpha: {
+        if (Theme.transparentBlurLayers)
+            return 0.28;
+        if (Theme.blurForegroundLayers)
+            return Math.max(Theme.popupTransparency, 0.62);
+        return Theme.popupTransparency;
+    }
+    readonly property color fieldColor: Theme.withAlpha(Theme.surfaceContainerHigh, fieldAlpha)
+    readonly property color fieldBorderColor: Theme.withAlpha(Theme.outline, blurredLayers ? 0.16 : Theme.layerOutlineOpacity)
+    readonly property color fieldFocusBorderColor: Theme.withAlpha(Theme.primary, blurredLayers ? 0.72 : 1.0)
+
     readonly property var breadcrumb: MenuModel.breadcrumb(tree, currentId)
     readonly property string headerTitle: currentId && tree.nodes[currentId] ? tree.nodes[currentId].title : "Menu"
 
@@ -346,18 +365,50 @@ PanelWindow {
                         width: parent.width
                         height: 36
                         radius: Theme.cornerRadius
-                        color: Theme.surfaceContainerHigh
+                        color: root.fieldColor
+                        border.width: searchInput.activeFocus ? 2 : 1
+                        border.color: searchInput.activeFocus ? root.fieldFocusBorderColor : root.fieldBorderColor
+
+                        // The field holds focus the whole time the menu is
+                        // open, so the focused border is the resting state and
+                        // these only animate the open. Matching DankTextField's
+                        // own behaviours keeps the menu feeling like the rest
+                        // of the shell.
+                        Behavior on border.color {
+                            ColorAnimation {
+                                duration: Theme.shortDuration
+                                easing.type: Theme.standardEasing
+                            }
+                        }
+
+                        Behavior on border.width {
+                            NumberAnimation {
+                                duration: Theme.shortDuration
+                                easing.type: Theme.standardEasing
+                            }
+                        }
+
+                        DankIcon {
+                            id: searchIcon
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.spacingM
+                            anchors.verticalCenter: parent.verticalCenter
+                            name: "search"
+                            size: Theme.fontSizeMedium
+                            color: searchInput.activeFocus ? Theme.primary : Theme.surfaceVariantText
+                        }
 
                         // Sibling of the field rather than a child of it: a
                         // TextInput paints its own text layer over its children,
                         // so a placeholder nested inside it never shows.
                         StyledText {
-                            anchors.left: parent.left
-                            anchors.leftMargin: Theme.spacingM
+                            anchors.left: searchIcon.right
+                            anchors.leftMargin: Theme.spacingS
                             anchors.verticalCenter: parent.verticalCenter
                             visible: searchInput.text === ""
                             text: root.currentId ? "Search " + root.headerTitle : "Search"
-                            color: Theme.surfaceVariantText
+                            color: Theme.outlineButton
                             font.pixelSize: Theme.fontSizeMedium
                         }
 
@@ -365,7 +416,7 @@ PanelWindow {
                             id: searchInput
 
                             anchors.fill: parent
-                            anchors.leftMargin: Theme.spacingM
+                            anchors.leftMargin: searchIcon.width + Theme.spacingM + Theme.spacingS
                             anchors.rightMargin: Theme.spacingM
                             verticalAlignment: TextInput.AlignVCenter
                             color: Theme.surfaceText
