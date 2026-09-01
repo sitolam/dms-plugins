@@ -300,6 +300,8 @@ installed — work here too, under the same triggers they use in spotlight:
 ;shrug      emoji
 ```
 
+![a calculator answer in the menu](screenshots/plugins.png)
+
 The trigger is honoured at **any level**, not just the root: the prefix is
 explicit intent, and the level you are standing in has nothing to say about an
 arithmetic expression. A plugin's rows come back in the plugin's own order,
