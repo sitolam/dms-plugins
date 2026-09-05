@@ -447,6 +447,24 @@ PluginComponent {
                 let msg
                 try { msg = JSON.parse(data) } catch (e) { return }
                 if (msg.error) {
+                    // MouthGuard voluntarily gave up the camera -- its own
+                    // periodic yield window, or another client grabbing it
+                    // mid-stream (see detector.py's yield/retry loop, the
+                    // lowest-priority behaviour this exists to provide).
+                    // Not fatal: stay active, and reuse the same paused UI
+                    // state auto-pause uses -- _onMeasurement's existing
+                    // paused-handling reconciles the gap once a real
+                    // measurement arrives after the detector reclaims the
+                    // camera on its own, whether that takes one retry or
+                    // many. No toast: this can legitimately repeat every
+                    // YIELD_INTERVAL_S for as long as another app is using
+                    // the camera, and that is working as intended, not an
+                    // error to surface each time.
+                    if (msg.error === "camera_yielded") {
+                        root.paused = true
+                        root.mouthState = "paused"
+                        return
+                    }
                     ToastService?.showError("MouthGuard: " + msg.error + " — " + msg.detail)
                     // A failed resume attempt reports camera_busy too, but
                     // detector.py deliberately stays alive and paused rather

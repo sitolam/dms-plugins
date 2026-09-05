@@ -10,6 +10,37 @@
 
 let
   inherit (pkgs) lib;
+
+  # The webcam is already a shared PipeWire camera source on this desktop
+  # (wireplumber's v4l2 monitor owns /dev/video0 and re-exposes it as a
+  # Video/Source node) -- gaze reads the same node ("resolved through
+  # PipeWire at runtime", modules/hardware/gaze.nix). opencv4's default
+  # build has no GStreamer support, so detector.py's only option was
+  # cv2.CAP_V4L2 straight against /dev/video0: a second exclusive open of
+  # the device node PipeWire itself already holds, which starved every
+  # other PipeWire camera client -- gaze's face auth and any browser/video
+  # call -- for as long as MouthGuard was active. Building opencv4 with
+  # GStreamer, and pulling in the plugin that speaks to PipeWire
+  # (pipewiresrc, shipped by pipewire itself), lets detector.py
+  # join that same shared node instead of fighting it for exclusive access.
+  gstPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" (
+    (with pkgs.gst_all_1; [
+      # .out: gst_all_1.gstreamer's default output is "bin" (gst-inspect
+      # etc, no plugins) -- "${pkg}/..." string interpolation on the bare
+      # attribute silently picked that one, so libgstcoreelements.so
+      # (capsfilter, videoconvert's caps-negotiation glue) was never on
+      # the path and every parse-launch link failed with
+      # `no such element factory "capsfilter"`.
+      gstreamer.out
+      gst-plugins-base
+    ])
+    # pipewiresrc/pipewiresink ship as part of pipewire itself
+    # (lib/gstreamer-1.0/libgstpipewire.so), not gst-plugins-good/-bad --
+    # confirmed by build: pointing GST_PLUGIN_SYSTEM_PATH_1_0 at
+    # gst-plugins-good alone left GStreamer reporting `no element
+    # "pipewiresrc"`.
+    ++ [ pkgs.pipewire ]
+  );
 in
 rec {
   # The two MediaPipe TFLite bundles the web app's @mediapipe/face_mesh 0.4
@@ -31,7 +62,7 @@ rec {
   pythonEnv = pkgs.python3.withPackages (
     ps: with ps; [
       openvino
-      opencv4
+      (opencv4.override { enableGStreamer = true; })
       numpy
     ]
   );
@@ -93,6 +124,15 @@ rec {
 
   detector = pkgs.writeShellScriptBin "mouthguard-detector" ''
     export MOUTHGUARD_MODEL_DIR=''${MOUTHGUARD_MODEL_DIR:-${models}}
+    # pipewire's own pipewiresrc plugin, found by GStreamer's own plugin
+    # scanner rather than linked -- opencv4's GStreamer support loads
+    # plugins as .so files at runtime, not build time.
+    export GST_PLUGIN_SYSTEM_PATH_1_0=''${GST_PLUGIN_SYSTEM_PATH_1_0:-${gstPluginPath}}
+    # pw-dump: detector.py's pipewire_target_for() shells out to it to
+    # resolve --device's /dev/videoN into the PipeWire node name
+    # pipewiresrc needs (see that function's docstring for why -- there is
+    # no "default camera" wireplumber will pick without one).
+    export PATH="${pkgs.pipewire}/bin''${PATH:+:$PATH}"
     ${lib.optionalString pkgs.stdenv.hostPlatform.isx86_64 ''
       # Everything below is what it takes to reach the NPU; all of it is
       # harmless on a machine that has none, where mouthguard_mesh falls
@@ -119,7 +159,7 @@ rec {
     (pkgs.python3.withPackages (
       ps: with ps; [
         openvino
-        opencv4
+        (opencv4.override { enableGStreamer = true; })
         numpy
         pytest
       ]
