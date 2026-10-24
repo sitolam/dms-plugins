@@ -14,7 +14,7 @@ PluginComponent {
     // --- settings, mirrored from pluginData -------------------------------
     readonly property string device: pluginData?.device ?? "/dev/video0"
     // MouthGuardSettings.qml's threshold slider is int-only (DMS 1.5.3
-    // SliderSetting/DankSlider have no fractional step -- see that file's
+    // SliderSetting/DankSlider, now DSlider, have no fractional step -- see that file's
     // header comment) and stores TENTHS of a gap-unit so a stock slider can
     // reach the 5.0 default (50 stored, e.g. minimum 10 = threshold 1.0).
     // Divide by 10 here to recover the real px-scale value
@@ -558,12 +558,12 @@ PluginComponent {
     // savePluginState, NOT savePluginData -- the two are not interchangeable
     // and the difference is why "detection was on" used to be forgotten across
     // a shell restart. savePluginData routes through SettingsData into
-    // ~/.config/DankMaterialShell/plugin_settings.json, the file that holds the
+    // ~/.config/dms/plugin_settings.json, the file that holds the
     // user's DECLARED settings; anyone managing their dotfiles declaratively
     // (home-manager, chezmoi, a read-only /nix symlink) has that file
     // unwritable, and DMS's FileView there sets printErrors: false, so the
     // write fails without a single log line. savePluginState writes
-    // ~/.local/state/DankMaterialShell/plugins/<id>_state.json instead, which
+    // ~/.local/state/dms/plugins/<id>_state.json instead, which
     // DMS creates and owns -- the same file `history` above already persists
     // to successfully. Whether it is on is runtime state, not a setting the
     // user configured, so it belongs there on the merits too.

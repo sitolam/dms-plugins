@@ -2,6 +2,7 @@ import QtQuick
 import qs.Common
 import qs.Widgets
 import qs.Modules.Plugins
+import qs.DCommon.Widgets
 
 PluginComponent {
     id: root
@@ -147,7 +148,7 @@ PluginComponent {
                     }
                 }
 
-                DankButton {
+                DButton {
                     text: root.daemon?.active ? "Stop" : "Start"
                     onClicked: root.daemon?.toggle()
                 }
@@ -167,7 +168,7 @@ PluginComponent {
                 anchors.centerIn: parent
                 spacing: Theme.spacingXS
 
-                DankIcon {
+                DIcon {
                     anchors.verticalCenter: parent.verticalCenter
                     name: root.iconFor[root.mouthState]
                     size: Theme.iconSizeSmall
@@ -210,7 +211,7 @@ PluginComponent {
             radius: Theme.cornerRadius
             color: Theme.surfaceContainerHigh
 
-            DankIcon {
+            DIcon {
                 id: vicon
                 anchors.centerIn: parent
                 name: root.iconFor[root.mouthState]

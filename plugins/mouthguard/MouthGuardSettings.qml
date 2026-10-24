@@ -5,7 +5,7 @@ import qs.Modules.Plugins
 
 // SliderSetting (Modules/Plugins/SliderSetting.qml in DMS 1.5.3, confirmed
 // against the live shell at /nix/store/16lzj41bslxwwbpwwl9ga6nvq6pqa46j-
-// dms-shell-1.5.3) wraps DankSlider, and both are integer-only end to end:
+// dms-shell-1.5.3; DankSlider is DSlider since 2.0, still int-only) wraps DankSlider, and both are integer-only end to end:
 // SliderSetting declares `property int defaultValue` / `property int
 // value`, and DankSlider itself declares `property int value` and rounds
 // every drag/wheel update with Math.round(). Neither exposes `from`, `to`,

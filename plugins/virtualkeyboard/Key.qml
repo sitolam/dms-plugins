@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Common
 import qs.Widgets
+import qs.DCommon.Widgets
 import "KeyShape.js" as KeyShape
 
 StyledRect {
@@ -37,7 +38,7 @@ StyledRect {
     // grey blocks pasted over the blurred card.
     color: isPressed ? Theme.primaryPressed : latched ? Theme.primarySelected : Theme.withAlpha(Theme.primary, 0.08)
 
-    DankIcon {
+    DIcon {
         anchors.centerIn: parent
         visible: root.isBackspace || root.isEnter
         name: root.isBackspace ? "backspace" : "keyboard_return"

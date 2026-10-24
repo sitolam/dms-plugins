@@ -1,17 +1,17 @@
 <div align="center">
 
-# dms-plugins
+# dux-plugins
 
-**Plugins for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell).**
+**Plugins for [Dux Shell](https://github.com/duxlabs-dev/dux-shell)** (formerly DankMaterialShell).
 
 Written for [sitolamix](https://github.com/sitolam/sitolamix), but tied to nothing —
 they are in the official plugin registry, so `dms plugins install` is all it takes
 on any distro, and NixOS gets them as flake packages.
 
-[![DMS](https://img.shields.io/badge/DMS-%E2%89%A5%201.5.0-6750a4?style=flat-square)](https://github.com/AvengeMedia/DankMaterialShell)
+[![DMS](https://img.shields.io/badge/DMS-%E2%89%A5%202.0.0-6750a4?style=flat-square)](https://github.com/duxlabs-dev/dux-shell)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](#license)
 [![Compositors](https://img.shields.io/badge/compositors-niri%20%7C%20Hyprland%20%7C%20any-4c9a2a?style=flat-square)](#)
-[![Registry](https://img.shields.io/badge/DMS%20registry-listed-ff8f00?style=flat-square)](https://github.com/AvengeMedia/dms-plugin-registry)
+[![Registry](https://img.shields.io/badge/DMS%20registry-listed-ff8f00?style=flat-square)](https://github.com/duxlabs-dev/dux-plugin-registry)
 
 </div>
 
@@ -78,7 +78,7 @@ crowded side section has no room to expand along it.
 ## Install
 
 These plugins are listed in the official
-[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so the
+[Dux Shell plugin registry](https://github.com/duxlabs-dev/dux-plugin-registry), so the
 short answer on **any distro** is:
 
 ```bash
@@ -103,26 +103,26 @@ install and on NixOS is a `nix build` (see
 <details>
 <summary><b>From a clone instead</b> — for hacking on a plugin, or pinning it to this repo</summary>
 
-DMS loads plugins from `~/.config/DankMaterialShell/plugins/<id>`, where `<id>`
+DMS loads plugins from `~/.config/dms/plugins/<id>`, where `<id>`
 must match the `id` in the plugin's `plugin.json` — `dankMenu`, `mouthGuard`,
 `virtualKeyboard` and `barDropdown`, camelCase, note the capital letters.
 Symlink the clone and a `git pull` updates the plugin:
 
 ```bash
-git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
-mkdir -p ~/.config/DankMaterialShell/plugins
+git clone https://github.com/sitolam/dux-plugins ~/src/dux-plugins
+mkdir -p ~/.config/dms/plugins
 
-ln -s ~/src/dms-plugins/plugins/dankmenu        ~/.config/DankMaterialShell/plugins/dankMenu
-ln -s ~/src/dms-plugins/plugins/mouthguard      ~/.config/DankMaterialShell/plugins/mouthGuard
-ln -s ~/src/dms-plugins/plugins/virtualkeyboard ~/.config/DankMaterialShell/plugins/virtualKeyboard
-ln -s ~/src/dms-plugins/plugins/bardropdown     ~/.config/DankMaterialShell/plugins/barDropdown
+ln -s ~/src/dux-plugins/plugins/dankmenu        ~/.config/dms/plugins/dankMenu
+ln -s ~/src/dux-plugins/plugins/mouthguard      ~/.config/dms/plugins/mouthGuard
+ln -s ~/src/dux-plugins/plugins/virtualkeyboard ~/.config/dms/plugins/virtualKeyboard
+ln -s ~/src/dux-plugins/plugins/bardropdown     ~/.config/dms/plugins/barDropdown
 ```
 
 Or copy just the one directory, if you don't want the clone lying around:
 
 ```bash
-git clone --depth 1 https://github.com/sitolam/dms-plugins /tmp/dms-plugins
-cp -r /tmp/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
+git clone --depth 1 https://github.com/sitolam/dux-plugins /tmp/dux-plugins
+cp -r /tmp/dux-plugins/plugins/dankmenu ~/.config/dms/plugins/dankMenu
 ```
 
 </details>
@@ -134,26 +134,26 @@ doesn't want, so take the plugins as flake packages instead:
 
 ```nix
 # flake.nix
-inputs.dms-plugins.url = "github:sitolam/dms-plugins";
+inputs.dux-plugins.url = "github:sitolam/dux-plugins";
 ```
 
 ```nix
 programs.dank-material-shell.plugins = {
   dankMenu = {
     enable = true;
-    src = inputs.dms-plugins.packages.${pkgs.system}.dankmenu;
+    src = inputs.dux-plugins.packages.${pkgs.system}.dankmenu;
   };
   mouthGuard = {
     enable = true;
-    src = inputs.dms-plugins.packages.${pkgs.system}.mouthguard;
+    src = inputs.dux-plugins.packages.${pkgs.system}.mouthguard;
   };
   virtualKeyboard = {
     enable = true;
-    src = inputs.dms-plugins.packages.${pkgs.system}.virtualkeyboard;
+    src = inputs.dux-plugins.packages.${pkgs.system}.virtualkeyboard;
   };
   barDropdown = {
     enable = true;
-    src = inputs.dms-plugins.packages.${pkgs.system}.bardropdown;
+    src = inputs.dux-plugins.packages.${pkgs.system}.bardropdown;
     settings.targets = [ "ambientSound" "systemTray" "usbManager" ];
   };
 };
@@ -378,13 +378,13 @@ not package and OpenVINO will only load from beside its own libraries.
 ## Publishing a plugin to the DMS registry
 
 All three plugins here are listed in the
-[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry) — that
+[Dux Shell plugin registry](https://github.com/duxlabs-dev/dux-plugin-registry) — that
 is what makes them installable with `dms plugins install` and findable in the
 in-shell plugin browser, rather than only by cloning this repo. Notes for adding
 another; the [official guide](https://danklinux.com/docs/contributing-registry)
 is the authority:
 
-1. Fork [`AvengeMedia/dms-plugin-registry`](https://github.com/AvengeMedia/dms-plugin-registry).
+1. Fork [`duxlabs-dev/dux-plugin-registry`](https://github.com/duxlabs-dev/dux-plugin-registry).
 2. Add `plugins/{github-username}-{plugin-name}.json`, lowercase and hyphenated
    — e.g. `sitolam-dankmenu.json`.
 3. Fill in the entry:
@@ -395,14 +395,14 @@ is the authority:
      "name": "Dank Menu",
      "capabilities": ["daemon", "ipc"],
      "category": "utilities",
-     "repo": "https://github.com/sitolam/dms-plugins",
+     "repo": "https://github.com/sitolam/dux-plugins",
      "path": "plugins/dankmenu",
      "author": "sitolam",
      "description": "Omarchy-style root menu: one key to every command, with built-in search",
      "dependencies": [],
      "compositors": ["any"],
      "distro": ["any"],
-     "screenshot": "https://raw.githubusercontent.com/sitolam/dms-plugins/main/plugins/dankmenu/screenshots/root.png"
+     "screenshot": "https://raw.githubusercontent.com/sitolam/dux-plugins/main/plugins/dankmenu/screenshots/root.png"
    }
    ```
 

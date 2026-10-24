@@ -1,5 +1,6 @@
 {
   "id": "barDropdown",
+    "requires_dms": ">=2.0.0",
   "name": "Bar Dropdown",
   "description": "One bar button that drops a panel of real bar widgets below the bar, instead of expanding along it.",
   "version": "0.1.0",
@@ -12,7 +13,7 @@
   ],
   "component": "./BarDropdownWidget.qml",
   "settings": "./BarDropdownSettings.qml",
-  "repo": "https://github.com/sitolam/dms-plugins",
+  "repo": "https://github.com/sitolam/dux-plugins",
   "permissions": [
     "settings_read",
     "settings_write"

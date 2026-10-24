@@ -1,5 +1,5 @@
 {
-  description = "MouthGuard — mouth closure tracker for DankMaterialShell";
+  description = "MouthGuard — mouth closure tracker for Dux Shell";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

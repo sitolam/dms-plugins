@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Common
 import qs.Widgets
+import qs.DCommon.Widgets
 
 ListView {
     id: root
@@ -68,7 +69,7 @@ ListView {
                 width: visible ? root.iconSize : 0
                 height: root.iconSize
 
-                DankIcon {
+                DIcon {
                     anchors.centerIn: parent
                     visible: delegateRoot.iconKind === "material"
                     name: delegateRoot.modelData.icon
@@ -118,7 +119,7 @@ ListView {
 
         // A submenu advertises that Enter goes deeper rather than doing
         // something irreversible.
-        DankIcon {
+        DIcon {
             id: chevron
 
             anchors.right: parent.right

@@ -1,5 +1,5 @@
 {
-  description = "sitolam's DankMaterialShell plugins";
+  description = "sitolam's Dux Shell (formerly DankMaterialShell) plugins";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 

@@ -4,6 +4,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import qs.Common
 import qs.Widgets
+import qs.DCommon.Widgets
 import "MenuModel.js" as MenuModel
 import "Search.js" as Search
 import "Conditions.js" as ConditionsJs
@@ -31,22 +32,11 @@ PanelWindow {
     // override is silently rejected.
     signal menuClosed
 
-    // The search field's colours, worked out the way spotlight works out its
-    // own (Modals/DankLauncherV2/LauncherContent.qml): a flat surfaceContainerHigh
-    // slab reads as a grey brick on a card that is itself translucent over a
-    // blur. Letting the blur through the field instead keeps it part of the
-    // card, and the alpha has to follow the user's blur settings or a
-    // transparent theme gets an opaque field and an opaque one gets a milky
-    // rectangle.
+    // The search field's colours, the way Dux Shell's own fields work them out
+    // (DTextField): the chip surface through Theme.foregroundColor, so the
+    // "Foreground layers" transparency setting applies here too.
     readonly property bool blurredLayers: Theme.blurForegroundLayers || Theme.transparentBlurLayers
-    readonly property real fieldAlpha: {
-        if (Theme.transparentBlurLayers)
-            return 0.28;
-        if (Theme.blurForegroundLayers)
-            return Math.max(Theme.popupTransparency, 0.62);
-        return Theme.popupTransparency;
-    }
-    readonly property color fieldColor: Theme.withAlpha(Theme.surfaceContainerHigh, fieldAlpha)
+    readonly property color fieldColor: Theme.foregroundColor(Theme.chipSurface, Theme.isFloatingWindow(root))
     readonly property color fieldBorderColor: Theme.withAlpha(Theme.outline, blurredLayers ? 0.16 : Theme.layerOutlineOpacity)
     readonly property color fieldFocusBorderColor: Theme.withAlpha(Theme.primary, blurredLayers ? 0.72 : 1.0)
 
@@ -399,7 +389,7 @@ PanelWindow {
                             }
                         }
 
-                        DankIcon {
+                        DIcon {
                             id: searchIcon
 
                             anchors.left: parent.left

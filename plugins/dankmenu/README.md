@@ -1,7 +1,7 @@
 # dankMenu
 
 One key to every command on the machine — a hierarchical, searchable root menu
-for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell), in
+for [Dux Shell](https://github.com/duxlabs-dev/dux-shell), in
 the shape of [Omarchy](https://github.com/basecamp/omarchy)'s `Super+Space`
 menu.
 
@@ -52,7 +52,7 @@ shell process, and the launcher plugins themselves — see below.
 Requires DMS ≥ 1.5.0. Nothing else — the plugin is QML and JavaScript, there is
 no build step, and it references no path above its own root.
 
-**Any distro**, from the [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry):
+**Any distro**, from the [Dux Shell plugin registry](https://github.com/duxlabs-dev/dux-plugin-registry):
 
 ```bash
 dms plugins install dankMenu
@@ -69,16 +69,16 @@ The directory name must match `plugin.json`'s `id`, `dankMenu`. Symlinking the
 clone means the plugin updates with a `git pull`:
 
 ```bash
-git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
-mkdir -p ~/.config/DankMaterialShell/plugins
-ln -s ~/src/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
+git clone https://github.com/sitolam/dux-plugins ~/src/dux-plugins
+mkdir -p ~/.config/dms/plugins
+ln -s ~/src/dux-plugins/plugins/dankmenu ~/.config/dms/plugins/dankMenu
 ```
 
 Or copy the directory, if you don't want the clone lying around:
 
 ```bash
-git clone --depth 1 https://github.com/sitolam/dms-plugins /tmp/dms-plugins
-cp -r /tmp/dms-plugins/plugins/dankmenu ~/.config/DankMaterialShell/plugins/dankMenu
+git clone --depth 1 https://github.com/sitolam/dux-plugins /tmp/dux-plugins
+cp -r /tmp/dux-plugins/plugins/dankmenu ~/.config/dms/plugins/dankMenu
 ```
 
 </details>
@@ -90,7 +90,7 @@ package instead:
 ```nix
 programs.dank-material-shell.plugins.dankMenu = {
   enable = true;
-  src = inputs.dms-plugins.packages.${pkgs.system}.dankmenu;
+  src = inputs.dux-plugins.packages.${pkgs.system}.dankmenu;
 };
 ```
 

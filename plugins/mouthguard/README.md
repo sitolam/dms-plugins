@@ -1,6 +1,6 @@
 # MouthGuard
 
-A [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell) (DMS) plugin that watches
+A [Dux Shell](https://github.com/duxlabs-dev/dux-shell) (DMS) plugin that watches
 your webcam and alerts you when your mouth has been open too long — useful if you're trying to
 train yourself into habitual nasal breathing / mouth closure. It is a native port of the
 browser-based app at **[github.com/sitolam/mouthguard](https://github.com/sitolam/mouthguard)**:
@@ -111,7 +111,7 @@ Reaching an Intel NPU takes three pieces, all of which the flake wires up for yo
 ### Install the plugin
 
 MouthGuard is listed in the
-[DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry), so on any distro:
+[Dux Shell plugin registry](https://github.com/duxlabs-dev/dux-plugin-registry), so on any distro:
 ```bash
 dms plugins install mouthGuard
 ```
@@ -120,11 +120,11 @@ dms plugins install mouthGuard
 <details>
 <summary><b>From a clone instead</b> — for hacking on it, or pinning it to the repo</summary>
 
-From the [dms-plugins](https://github.com/sitolam/dms-plugins) monorepo — the directory name has
+From the [dux-plugins](https://github.com/sitolam/dux-plugins) monorepo — the directory name has
 to match `plugin.json`'s `id`, `mouthGuard`:
 ```bash
-git clone https://github.com/sitolam/dms-plugins ~/src/dms-plugins
-ln -s ~/src/dms-plugins/plugins/mouthguard ~/.config/DankMaterialShell/plugins/mouthGuard
+git clone https://github.com/sitolam/dux-plugins ~/src/dux-plugins
+ln -s ~/src/dux-plugins/plugins/mouthguard ~/.config/dms/plugins/mouthGuard
 ```
 
 </details>

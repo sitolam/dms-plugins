@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import qs.Common
 import qs.Widgets
+import qs.DCommon.Widgets
 
 StyledRect {
     id: root
@@ -42,14 +43,14 @@ StyledRect {
         ColumnLayout {
             spacing: Theme.spacingXS
 
-            DankActionButton {
+            DActionButton {
                 iconName: "keep"
                 iconColor: root.pinned ? Theme.primary : Theme.surfaceText
                 tooltipText: root.pinned ? "Dock to bottom" : "Float"
                 onClicked: root.pinClicked()
             }
 
-            DankActionButton {
+            DActionButton {
                 iconName: "keyboard_hide"
                 tooltipText: "Hide"
                 onClicked: root.hideClicked()

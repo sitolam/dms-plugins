@@ -5,6 +5,7 @@ import qs.Common
 import qs.Modules.Plugins
 import qs.Services
 import qs.Widgets
+import qs.DCommon.Widgets
 
 // One bar button that drops a panel of real bar widgets *below* the bar.
 //
@@ -82,7 +83,7 @@ PluginComponent {
             spacing: Theme.spacingXS
             anchors.verticalCenter: parent?.verticalCenter ?? undefined
 
-            DankIcon {
+            DIcon {
                 anchors.verticalCenter: parent.verticalCenter
                 name: root.buttonIcon
                 size: root.iconSize
@@ -97,7 +98,7 @@ PluginComponent {
                 color: Theme.surfaceText
             }
 
-            DankIcon {
+            DIcon {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: root.showChevron
                 // The panel always drops downward from a top bar, so the

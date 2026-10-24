@@ -3,6 +3,7 @@ import qs.Common
 import qs.Widgets
 import qs.Modules.Plugins
 import qs.Services
+import qs.DCommon.Widgets
 
 PluginComponent {
     id: root
@@ -28,7 +29,7 @@ PluginComponent {
             radius: Theme.cornerRadius
             color: root.keyboardOpen ? Theme.primaryContainer : Theme.surfaceContainerHigh
 
-            DankIcon {
+            DIcon {
                 anchors.centerIn: parent
                 name: "keyboard"
                 size: root.iconSize
@@ -44,7 +45,7 @@ PluginComponent {
             radius: Theme.cornerRadius
             color: root.keyboardOpen ? Theme.primaryContainer : Theme.surfaceContainerHigh
 
-            DankIcon {
+            DIcon {
                 anchors.centerIn: parent
                 name: "keyboard"
                 size: root.iconSize

@@ -1,6 +1,6 @@
 # virtualKeyboard
 
-An on-screen keyboard for [DankMaterialShell](https://github.com/AvengeMedia/DankMaterialShell),
+An on-screen keyboard for [Dux Shell](https://github.com/duxlabs-dev/dux-shell),
 in the shape of the one in [end-4](https://github.com/end-4)'s
 [dots-hyprland](https://github.com/end-4/dots-hyprland). It docks to the
 bottom of the screen, types into whatever has focus through `ydotool`, and
@@ -49,7 +49,7 @@ physical keycap does.
 Requires DMS ≥ 1.5.0 and `ydotool`. The plugin itself is QML and JavaScript —
 no build step, and it references no path above its own root.
 
-**Any distro**, from the [DMS plugin registry](https://github.com/AvengeMedia/dms-plugin-registry):
+**Any distro**, from the [Dux Shell plugin registry](https://github.com/duxlabs-dev/dux-plugin-registry):
 
 ```bash
 dms plugins install virtualKeyboard
@@ -85,13 +85,13 @@ ydotool key 30:1 30:0   # types `a` into the focused window
 
 ```nix
 # flake.nix
-inputs.dms-plugins.url = "github:sitolam/dms-plugins";
+inputs.dux-plugins.url = "github:sitolam/dux-plugins";
 ```
 
 ```nix
 programs.dank-material-shell.plugins.virtualKeyboard = {
   enable = true;
-  src = inputs.dms-plugins.packages.${pkgs.system}.virtualkeyboard;
+  src = inputs.dux-plugins.packages.${pkgs.system}.virtualkeyboard;
 };
 
 programs.ydotool.enable = true;   # system-level: starts ydotoold
