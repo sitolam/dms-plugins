@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0
+
+### Added
+
+- **An array form for the menu file.** Besides Omarchy's object keyed by id,
+  the file may be an array of rows, each carrying its dotted id in an `id`
+  field; array order is display order, and the dots still make the hierarchy.
+  It is for generated menus: Nix's `builtins.toJSON`, Go's `encoding/json` with
+  a map, or anything piped through `jq -S` sort object keys but keep a list's
+  order, so a generator can now serialise its rows directly instead of
+  assembling ordered JSONC as text.
+
+  The object form is read exactly as before, so Omarchy menus still paste in.
+  A menu in the array form will not work in Omarchy.
+
 ## 0.3.1
 
 ### Fixed

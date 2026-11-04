@@ -26,9 +26,10 @@ paste in and parse unchanged, and their `when` / `checked` / `disabled`
 semantics behave the same way. The IPC verbs mirror `omarchy-menu`'s too, so
 routes and muscle memory carry over.
 
-The schema is a superset, not a copy: [`labelCmd`](#live-labels) is an addition
-of ours. Omarchy menus still paste in unchanged — the extra field is simply
-absent from them — but a menu using `labelCmd` will not work in Omarchy.
+The schema is a superset, not a copy: [`labelCmd`](#live-labels) and the
+[array form](#the-file-format) are additions of ours. Omarchy menus still paste
+in unchanged — neither appears in them — but a menu using either will not work
+in Omarchy.
 
 Go try the real thing if you're on Arch — it's very good.
 
@@ -196,6 +197,22 @@ Declaration order is display order.
 }
 ```
 
+The file can also be an **array of rows**, each carrying its dotted id in an
+`id` field. It is the same tree — the dots still make the hierarchy — and array
+order is display order:
+
+```jsonc
+[
+  {"id":"system","icon":"power_settings_new","label":"System","aliases":["power-menu"]},
+  {"id":"system.lock","icon":"lock","label":"Lock","action":"loginctl lock-session"},
+  {"id":"apps","icon":"apps","label":"Apps","provider":"apps"},
+]
+```
+
+That form is for generated menus, whose tools often cannot choose the order of
+an object's keys — see [Generating the tree](#generating-the-tree). A row
+without a string `id` stops the whole file loading, as a syntax error does.
+
 The **kind of a row is inferred**, never declared: `action` makes it an action,
 `target` a link, `provider` a provider-backed submenu, and anything else a plain
 submenu.
@@ -204,6 +221,7 @@ submenu.
 
 | field | meaning |
 | --- | --- |
+| `id` | the row's dotted id, in the array form only. In the object form the key is the id. |
 | `label` | the row's text. Defaults to its id. |
 | `icon` | a [Material Symbols](https://fonts.google.com/icons) name (`wifi`, `school`). App rows use the icon theme instead. |
 | `iconFont` | font family for the glyph, when it isn't the menu font |
@@ -322,17 +340,32 @@ typed, so an unused plugin costs nothing.
 ### Generating the tree
 
 Because `menuPath` is just a path, the file can be generated. On NixOS that
-means menu rows can reference store paths and your own flake:
+means menu rows can reference store paths and your own flake.
+
+Write the rows as a list in the [array form](#the-file-format) and hand it to
+`builtins.toJSON`. Nix serialises an attrset's names alphabetically, so rows
+keyed by id would come out sorted — and a power menu reading "lock, logout,
+reboot, shutdown, suspend" is not the one anybody wants — but a list keeps its
+order:
 
 ```nix
-{ id = "update.rebuild"; icon = "build"; label = "Rebuild";
-  action = "ghostty --working-directory=${flakeDir} -e just rebuild"; }
+let
+  rows = [
+    { id = "update"; icon = "system_update"; label = "Update"; }
+    { id = "update.rebuild"; icon = "build"; label = "Rebuild";
+      action = "ghostty --working-directory=${flakeDir} -e just rebuild"; }
+    { id = "update.firmware"; icon = "memory"; label = "Firmware";
+      action = "fwupdmgr update"; }
+  ];
+in
+{
+  programs.dank-material-shell.plugins.dankMenu.settings.menuPath =
+    "${pkgs.writeText "dankmenu.json" (builtins.toJSON rows)}";
+}
 ```
 
-Emit it as ordered JSONC text rather than via `pkgs.formats.json` — Nix
-serialises attrsets alphabetically, and menu rows have a meaningful order. A
-power menu reading "lock, logout, reboot, shutdown, suspend" is not the one
-anybody wants. See
+Any other generator that sorts or loses key order — Go's `encoding/json`,
+`jq -S` — can use the array form the same way. See
 [sitolamix's `plugins.nix`](https://github.com/sitolam/sitolamix/blob/main/modules/desktop/dms/plugins.nix)
 for a full worked example.
 

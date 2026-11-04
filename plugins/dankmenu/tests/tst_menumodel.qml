@@ -100,4 +100,69 @@ TestCase {
         compare(tree.roots, ["a.b"]);
         compare(tree.orphans, ["a.b"]);
     }
+
+    // The array form: each row carries its id, and the array sets the order.
+    property string arraySample: '[\n' + '  // root\n' + '  {"id":"system","label":"System","aliases":["power-menu"]},\n' + '  {"id":"system.suspend","label":"Suspend","action":"systemctl suspend"},\n' + '  {"id":"apps","label":"Apps","provider":"apps"},\n' + '  {"id":"system.lock","label":"Lock","action":"loginctl lock-session"},\n' + ']'
+
+    function test_array_builds_the_same_tree_as_the_object() {
+        const obj = JSON.parse(MenuModel.stripTrailingCommas(MenuModel.stripComments(sample)));
+        const rows = [];
+        for (const id in obj) {
+            const row = Object.assign({}, obj[id]);
+            row.id = id;
+            rows.push(row);
+        }
+        compare(MenuModel.build(rows), MenuModel.build(obj));
+    }
+
+    function test_array_order_is_display_order() {
+        const tree = MenuModel.parse(arraySample);
+        compare(tree.roots, ["system", "apps"]);
+        compare(tree.nodes["system"].children, ["system.suspend", "system.lock"]);
+        compare(MenuModel.resolve(tree, "power-menu"), "system");
+    }
+
+    function test_array_order_holds_for_numeric_ids() {
+        const tree = MenuModel.parse('[{"id":"10"},{"id":"2"},{"id":"b"},{"id":"a"}]');
+        compare(tree.roots, ["10", "2", "b", "a"]);
+    }
+
+    function test_array_nests_by_dotted_id() {
+        const tree = MenuModel.parse('[{"id":"setup","label":"Setup"},{"id":"setup.network","label":"Network"},' + '{"id":"setup.network.dns","label":"DNS","action":"true"}]');
+        compare(tree.roots, ["setup"]);
+        compare(tree.nodes["setup.network"].parent, "setup");
+        compare(tree.nodes["setup.network"].children, ["setup.network.dns"]);
+        compare(MenuModel.breadcrumb(tree, "setup.network.dns"), ["Setup", "Network", "DNS"]);
+    }
+
+    function test_array_orphan_becomes_a_root_and_is_recorded() {
+        const tree = MenuModel.parse('[{"id":"a","label":"A"},{"id":"b.c","label":"Orphan"}]');
+        compare(tree.roots, ["a", "b.c"]);
+        compare(tree.orphans, ["b.c"]);
+    }
+
+    function test_array_repeated_id_replaces_the_row_in_place() {
+        const tree = MenuModel.parse('[{"id":"a","label":"First"},{"id":"b"},{"id":"a","label":"Second"}]');
+        compare(tree.roots, ["a", "b"]);
+        compare(tree.nodes["a"].label, "Second");
+    }
+
+    function test_array_row_without_a_string_id_rejects_the_file() {
+        const bad = ['[{"label":"No id"}]', '[{"id":3}]', '[{"id":""}]', '[null]', '["system"]', '[[]]', '[{"id":"a"},{"label":"No id"}]'];
+        for (let i = 0; i < bad.length; i++) {
+            let error = "";
+            try {
+                MenuModel.parse(bad[i]);
+            } catch (e) {
+                error = String(e);
+            }
+            verify(error.indexOf("of the menu array has no string id") !== -1, bad[i]);
+        }
+    }
+
+    function test_empty_array_is_an_empty_menu() {
+        const tree = MenuModel.parse("[]");
+        compare(tree.roots, []);
+        compare(tree.orphans, []);
+    }
 }

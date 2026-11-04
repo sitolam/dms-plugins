@@ -106,14 +106,54 @@ function parse(text) {
     return build(JSON.parse(stripTrailingCommas(stripComments(text))));
 }
 
+// The file's rows in declaration order, as [id, fields] pairs. Omarchy's form
+// is an object keyed by id. The array form carries each id in its row instead,
+// for generators that sort an object's keys -- Nix's builtins.toJSON, Go's
+// encoding/json with a map, or anything piped through `jq -S` -- but keep a
+// list's order.
+// The pairs are not folded back into an object: an engine enumerates
+// integer-like keys ("2", "10") first and ascending, which would undo the
+// array's order for exactly those ids.
+function rowsOf(obj) {
+    var rows = [];
+
+    if (!Array.isArray(obj)) {
+        for (var key in obj)
+            rows.push([key, obj[key]]);
+        return rows;
+    }
+
+    var at = Object.create(null);
+    for (var i = 0; i < obj.length; i++) {
+        var row = obj[i];
+        var id = row && typeof row === "object" ? row.id : undefined;
+        // Without an id a row has no place in the tree, so the file is
+        // rejected as a JSON syntax error would be.
+        if (typeof id !== "string" || id === "")
+            throw new Error("row " + i + " of the menu array has no string id");
+        // A repeated id replaces the earlier row where it stood, as a repeated
+        // key does in the object form.
+        if (Object.prototype.hasOwnProperty.call(at, id)) {
+            rows[at[id]][1] = row;
+            continue;
+        }
+        at[id] = rows.length;
+        rows.push([id, row]);
+    }
+
+    return rows;
+}
+
 // Dotted ids imply hierarchy: "setup.network.dns" is a child of
 // "setup.network". Declaration order in the file is the display order.
 function build(obj) {
+    var rows = rowsOf(obj);
     var nodes = {};
     var order = [];
 
-    for (var id in obj) {
-        var raw = obj[id] || {};
+    for (var r = 0; r < rows.length; r++) {
+        var id = rows[r][0];
+        var raw = rows[r][1] || {};
         var dot = id.lastIndexOf(".");
         nodes[id] = {
             id: id,
